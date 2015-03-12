@@ -234,6 +234,7 @@ int boot_splash_filedata_size;
 uint8_t qemu_extra_params_fw[2];
 
 const char *periodic_screenshot = NULL;
+int serial_commands_enabled = 0;
 
 static QEMUTimer *s_screenshot_timer;
 
@@ -3017,11 +3018,12 @@ int main(int argc, char **argv, char **envp)
             case QEMU_OPTION_loadvm:
                 loadvm = optarg;
                 break;
-
             case QEMU_OPTION_periodic_screenshot:
                 periodic_screenshot = optarg;
                 break;
-
+            case QEMU_OPTION_serial_commands:
+                serial_commands_enabled = 1;
+                break;
             case QEMU_OPTION_full_screen:
                 full_screen = 1;
                 break;

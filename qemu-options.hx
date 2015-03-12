@@ -2734,8 +2734,14 @@ STEXI
 Periodically save a screenshot to the specified folder or file
 ETEXI
 
-
-
+DEF("enable-serial-commands", 0, QEMU_OPTION_serial_commands, \
+    "-enable-serial-commands    interprets commands send to the serial port\n", QEMU_ARCH_ALL)
+STEXI
+@item -enable-serial-commands
+@findex -enable-serial-commands
+Checks the character stream sent by the guest to the serial port and
+interprets any commands that might be there. Useful for unattended setup tasks.
+ETEXI
 
 HXCOMM This is the last statement. Insert new options before this line!
 STEXI

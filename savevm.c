@@ -155,6 +155,58 @@ void qemu_announce_self(void)
 	qemu_announce_self_once(&timer);
 }
 
+/**
+ * This timer polls every second if a global variable has been set.
+ * If it is, take a snapshot
+ */
+
+#define SAVEVM_NAME_MAX_LEN 32
+int g_savevm_take_snapshot = 0;
+int g_savevm_snapshot_taken = 0;
+char g_savevm_snapshot_name[SAVEVM_NAME_MAX_LEN];
+static int g_savevm_exit = 0;
+
+void qemu_schedule_savevm(const char *name, int doexit)
+{
+    if (g_savevm_take_snapshot) {
+        return;
+    }
+
+    strncpy(g_savevm_snapshot_name, name, SAVEVM_NAME_MAX_LEN - 1);
+
+    g_savevm_take_snapshot = 1;
+    g_savevm_exit = doexit;
+}
+
+static void qemu_savevm_timer(void *opaque)
+{
+    QEMUTimer *timer = *(QEMUTimer **)opaque;
+
+    if (g_savevm_take_snapshot) {
+        printf("Saving VM (%s)!\n", g_savevm_snapshot_name);
+
+        QDict *qdict = qdict_new();
+        qdict_put_obj(qdict, "name", QOBJECT(qstring_from_str(g_savevm_snapshot_name)));
+
+        do_savevm(cur_mon, qdict);
+
+        g_savevm_snapshot_taken = 1;
+
+        if (g_savevm_exit) {
+            exit(-1);
+        }
+    } else {
+        qemu_mod_timer(timer, qemu_get_clock_ms(host_clock) + 1000);
+    }
+}
+
+void qemu_initialize_savevm_timer(void)
+{
+    static QEMUTimer *timer;
+    timer = qemu_new_timer_ms(host_clock, qemu_savevm_timer, &timer);
+    qemu_mod_timer(timer, qemu_get_clock_ms(host_clock) + 1000);
+}
+
 /***********************************************************/
 /* savevm/loadvm support */
 
