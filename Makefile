@@ -35,7 +35,7 @@ configure: ;
 
 $(call set-vpath, $(SRC_PATH):$(SRC_PATH)/hw)
 
-LIBS+=-lz $(LIBS_TOOLS)
+LIBS+=-lz $(LIBS_TOOLS) -lrt
 
 HELPERS-$(CONFIG_LINUX) = qemu-bridge-helper$(EXESUF)
 
@@ -172,7 +172,7 @@ qemu-img-cmds.h: $(SRC_PATH)/qemu-img-cmds.hx
 
 $(qapi-obj-y): $(GENERATED_HEADERS)
 qapi-dir := $(BUILD_DIR)/qapi-generated
-qemu-ga$(EXESUF): LIBS = $(LIBS_QGA)
+qemu-ga$(EXESUF): LIBS = $(LIBS_QGA) -lrt
 qemu-ga$(EXESUF): QEMU_CFLAGS += -I $(qapi-dir)
 
 gen-out-type = $(subst .,-,$(suffix $@))

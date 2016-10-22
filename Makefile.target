@@ -224,6 +224,7 @@ obj-$(CONFIG_NO_KVM) += kvm-stub.o
 obj-$(CONFIG_VGA) += vga.o
 obj-y += memory.o savevm.o
 LIBS+=-lz
+LIBS+=-lrt
 
 obj-i386-$(CONFIG_KVM) += hyperv.o
 
