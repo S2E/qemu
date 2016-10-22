@@ -87,6 +87,8 @@ typedef void PCIMapIORegionFunc(PCIDevice *pci_dev, int region_num,
                                 pcibus_t addr, pcibus_t size, int type);
 typedef int PCIUnregisterFunc(PCIDevice *pci_dev);
 
+typedef void PCIRebuildBarsFunc(PCIDevice *pci_dev);
+
 typedef struct PCIIORegion {
     pcibus_t addr; /* current PCI mapping address. -1 means not mapped */
 #define PCI_BAR_UNMAPPED (~(pcibus_t)0)
@@ -235,6 +237,9 @@ struct PCIDevice {
     bool has_rom;
     MemoryRegion rom;
     uint32_t rom_bar;
+
+    /* When disabled, the device will be invisible on the bus */
+    bool enabled;
 };
 
 void pci_register_bar(PCIDevice *pci_dev, int region_num,
@@ -548,14 +553,14 @@ static inline uint32_t pci_config_size(const PCIDevice *d)
 static inline int pci_dma_rw(PCIDevice *dev, dma_addr_t addr,
                              void *buf, dma_addr_t len, DMADirection dir)
 {
-    cpu_physical_memory_rw(addr, buf, len, dir == DMA_DIRECTION_FROM_DEVICE);
+    cpu_physical_memory_rw(addr, (uint8_t*) buf, len, dir == DMA_DIRECTION_FROM_DEVICE);
     return 0;
 }
 
 static inline int pci_dma_read(PCIDevice *dev, dma_addr_t addr,
                                void *buf, dma_addr_t len)
 {
-    return pci_dma_rw(dev, addr, buf, len, DMA_DIRECTION_TO_DEVICE);
+    return pci_dma_rw(dev, addr, (uint8_t*) buf, len, DMA_DIRECTION_TO_DEVICE);
 }
 
 static inline int pci_dma_write(PCIDevice *dev, dma_addr_t addr,

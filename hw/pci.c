@@ -340,6 +340,7 @@ static int get_pci_config_device(QEMUFile *f, void *pv, size_t size)
     config = g_malloc(size);
 
     qemu_get_buffer(f, config, size);
+
     for (i = 0; i < size; ++i) {
         if ((config[i] ^ s->config[i]) &
             s->cmask[i] & ~s->wmask[i] & ~s->w1cmask[i]) {
@@ -347,6 +348,7 @@ static int get_pci_config_device(QEMUFile *f, void *pv, size_t size)
             return -EINVAL;
         }
     }
+
     memcpy(s->config, config, size);
 
     pci_update_mappings(s);
@@ -368,6 +370,40 @@ static VMStateInfo vmstate_info_pci_config = {
     .get  = get_pci_config_device,
     .put  = put_pci_config_device,
 };
+
+
+/* Saving / restoring masks */
+#define DECLARE_PCI_MASK_GET(mask) \
+static int get_pci_config_ ## mask ## _device(QEMUFile *f, void *pv, size_t size) \
+{ \
+    uint8_t **v = pv; \
+    PCIDevice *s = container_of(pv, PCIDevice, mask); \
+    assert(size == pci_config_size(s)); \
+    qemu_get_buffer(f, *v, size); \
+    return 0; \
+}
+
+#define DECLARE_PCI_MASK_PUT(mask) \
+static void put_pci_config_## mask ##_device(QEMUFile *f, void *pv, size_t size) \
+{ \
+    const uint8_t **v = pv; \
+    assert(size == pci_config_size(container_of(pv, PCIDevice, mask))); \
+    qemu_put_buffer(f, *v, size); \
+}
+
+#define DECLARE_PCI_MASK_VMTATE(mask) \
+DECLARE_PCI_MASK_GET(mask) \
+DECLARE_PCI_MASK_PUT(mask) \
+static VMStateInfo vmstate_info_pci_ ## mask = { \
+    .name = "pci config mask", \
+    .get  = get_pci_config_ ## mask ## _device, \
+    .put  = put_pci_config_ ## mask ## _device, \
+};
+
+DECLARE_PCI_MASK_VMTATE(cmask)
+DECLARE_PCI_MASK_VMTATE(wmask)
+DECLARE_PCI_MASK_VMTATE(w1cmask)
+DECLARE_PCI_MASK_VMTATE(used)
 
 static int get_pci_irq_state(QEMUFile *f, void *pv, size_t size)
 {
@@ -413,9 +449,27 @@ const VMStateDescription vmstate_pci_device = {
     .minimum_version_id_old = 1,
     .fields      = (VMStateField []) {
         VMSTATE_INT32_LE(version_id, PCIDevice),
+        VMSTATE_BOOL(enabled, PCIDevice),
+        VMSTATE_BUFFER_UNSAFE_INFO(cmask, PCIDevice, 0,
+                                   vmstate_info_pci_cmask,
+                                   PCI_CONFIG_SPACE_SIZE),
+
+        VMSTATE_BUFFER_UNSAFE_INFO(wmask, PCIDevice, 0,
+                                   vmstate_info_pci_wmask,
+                                   PCI_CONFIG_SPACE_SIZE),
+
+        VMSTATE_BUFFER_UNSAFE_INFO(w1cmask, PCIDevice, 0,
+                                   vmstate_info_pci_w1cmask,
+                                   PCI_CONFIG_SPACE_SIZE),
+
+        VMSTATE_BUFFER_UNSAFE_INFO(used, PCIDevice, 0,
+                                   vmstate_info_pci_used,
+                                   PCI_CONFIG_SPACE_SIZE),
+
         VMSTATE_BUFFER_UNSAFE_INFO(config, PCIDevice, 0,
                                    vmstate_info_pci_config,
                                    PCI_CONFIG_SPACE_SIZE),
+
         VMSTATE_BUFFER_UNSAFE_INFO(irq_state, PCIDevice, 2,
 				   vmstate_info_pci_irq_state,
 				   PCI_NUM_PINS * sizeof(int32_t)),
@@ -430,9 +484,28 @@ const VMStateDescription vmstate_pcie_device = {
     .minimum_version_id_old = 1,
     .fields      = (VMStateField []) {
         VMSTATE_INT32_LE(version_id, PCIDevice),
+        VMSTATE_BOOL(enabled, PCIDevice),
+
+        VMSTATE_BUFFER_UNSAFE_INFO(cmask, PCIDevice, 0,
+                                   vmstate_info_pci_cmask,
+                                   PCIE_CONFIG_SPACE_SIZE),
+
+        VMSTATE_BUFFER_UNSAFE_INFO(wmask, PCIDevice, 0,
+                                   vmstate_info_pci_wmask,
+                                   PCIE_CONFIG_SPACE_SIZE),
+
+        VMSTATE_BUFFER_UNSAFE_INFO(w1cmask, PCIDevice, 0,
+                                   vmstate_info_pci_w1cmask,
+                                   PCIE_CONFIG_SPACE_SIZE),
+
+        VMSTATE_BUFFER_UNSAFE_INFO(used, PCIDevice, 0,
+                                   vmstate_info_pci_used,
+                                   PCIE_CONFIG_SPACE_SIZE),
+
         VMSTATE_BUFFER_UNSAFE_INFO(config, PCIDevice, 0,
                                    vmstate_info_pci_config,
                                    PCIE_CONFIG_SPACE_SIZE),
+
         VMSTATE_BUFFER_UNSAFE_INFO(irq_state, PCIDevice, 2,
 				   vmstate_info_pci_irq_state,
 				   PCI_NUM_PINS * sizeof(int32_t)),
@@ -982,6 +1055,7 @@ static void pci_update_mappings(PCIDevice *d)
         if (r->addr != PCI_BAR_UNMAPPED) {
             memory_region_del_subregion(r->address_space, r->memory);
         }
+
         r->addr = new_addr;
         if (r->addr != PCI_BAR_UNMAPPED) {
             memory_region_add_subregion_overlap(r->address_space,
@@ -1254,7 +1328,7 @@ static PciDeviceInfo *qmp_query_pci_device(PCIDevice *dev, PCIBus *bus,
     info->function = PCI_FUNC(dev->devfn);
 
     class = pci_get_word(dev->config + PCI_CLASS_DEVICE);
-    info->class_info.class = class;
+/*    info->class_info.dev_class = class;*/
     desc = get_class_desc(class);
     if (desc->desc) {
         info->class_info.has_desc = true;
@@ -1460,7 +1534,12 @@ PCIDevice *pci_find_device(PCIBus *bus, int bus_num, uint8_t devfn)
     if (!bus)
         return NULL;
 
-    return bus->devices[devfn];
+    PCIDevice *ret = bus->devices[devfn];
+    if (ret && !ret->enabled) {
+        ret = NULL;
+    }
+
+    return ret;
 }
 
 static int pci_qdev_init(DeviceState *qdev)
@@ -1487,6 +1566,9 @@ static int pci_qdev_init(DeviceState *qdev)
         do_pci_unregister_device(pci_dev);
         return -1;
     }
+
+    pci_dev->enabled = true;
+
     if (pc->init) {
         rc = pc->init(pci_dev);
         if (rc != 0) {
@@ -1723,6 +1805,8 @@ static int pci_add_option_rom(PCIDevice *pdev, bool is_default_rom)
     memory_region_init_ram(&pdev->rom, name, size);
     vmstate_register_ram(&pdev->rom, &pdev->qdev);
     ptr = memory_region_get_ram_ptr(&pdev->rom);
+
+
     load_image(path, ptr);
     g_free(path);
 
@@ -1790,7 +1874,7 @@ int pci_add_capability(PCIDevice *pdev, uint8_t cap_id,
     config[PCI_CAP_LIST_NEXT] = pdev->config[PCI_CAPABILITY_LIST];
     pdev->config[PCI_CAPABILITY_LIST] = offset;
     pdev->config[PCI_STATUS] |= PCI_STATUS_CAP_LIST;
-    memset(pdev->used + offset, 0xFF, size);
+    memset(pdev->used + offset, 0xFF, QEMU_ALIGN_UP(size, 4));
     /* Make capability read-only by default */
     memset(pdev->wmask + offset, 0, size);
     /* Check capability by default */
@@ -1810,7 +1894,7 @@ void pci_del_capability(PCIDevice *pdev, uint8_t cap_id, uint8_t size)
     memset(pdev->w1cmask + offset, 0, size);
     /* Clear cmask as device-specific registers can't be checked */
     memset(pdev->cmask + offset, 0, size);
-    memset(pdev->used + offset, 0, size);
+    memset(pdev->used + offset, 0, QEMU_ALIGN_UP(size, 4));
 
     if (!pdev->config[PCI_CAPABILITY_LIST])
         pdev->config[PCI_STATUS] &= ~PCI_STATUS_CAP_LIST;

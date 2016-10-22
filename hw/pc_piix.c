@@ -357,6 +357,22 @@ static QEMUMachine pc_machine_v1_1 = {
     .init = pc_init_pci,
     .max_cpus = 255,
     .is_default = 1,
+
+    //XXX: symbolic execution has problems with vapic for now, so we disable it.
+    .compat_props = (GlobalProperty[]) {
+        {
+            .driver   = "apic",
+            .property = "vapic",
+            .value    = "off",
+        },
+        //For compatibility between KVM and DBT snapshots
+        {
+            .driver   = "pc-sysfw",
+            .property = "rom_only",
+            .value    = stringify(1),
+        },
+        { /* end of list */ }
+    },
 };
 
 static QEMUMachine pc_machine_v1_0 = {
