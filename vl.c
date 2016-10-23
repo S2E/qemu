@@ -2362,7 +2362,7 @@ int main(int argc, char **argv, char **envp)
     runstate_init();
 
     init_clocks();
-    rtc_clock = host_clock;
+    rtc_clock = vm_clock;
 
     qemu_cache_utils_init(envp);
 
