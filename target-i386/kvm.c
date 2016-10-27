@@ -1682,6 +1682,7 @@ void kvm_arch_pre_run(CPUX86State *env, struct kvm_run *run)
 
         DPRINTF("setting tpr\n");
         run->cr8 = cpu_get_apic_tpr(env->apic_state);
+        run->apic_base = cpu_get_apic_base(env->apic_state);
     }
 }
 
