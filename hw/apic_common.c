@@ -25,27 +25,55 @@
 static int apic_irq_delivered;
 bool apic_report_tpr_access;
 
-void cpu_set_apic_base(DeviceState *d, uint64_t val)
-{
-    trace_cpu_set_apic_base(val);
+static APICCommonClass *s_cached_info = NULL;
+static DeviceState *s_cached_d = NULL;
+static APICCommonState *s_cached_s = NULL;
 
-    if (d) {
-        APICCommonState *s = APIC_COMMON(d);
-        APICCommonClass *info = APIC_COMMON_GET_CLASS(s);
-        info->set_base(s, val);
+static void get_apic_state(DeviceState *d, APICCommonState **s, APICCommonClass **info)
+{
+    /* APIC_* ops have complex hash lookups, which makes them slow */
+    if (s_cached_d != d) {
+        s_cached_s = APIC_COMMON(d);
+        s_cached_info = APIC_COMMON_GET_CLASS(s_cached_s);
+        s_cached_d = d;
+    }
+
+    if (s) {
+        *s = s_cached_s;
+    }
+
+    if (info) {
+        *info = s_cached_info;
     }
 }
 
-uint64_t cpu_get_apic_base(DeviceState *d)
+void cpu_set_apic_base(DeviceState *d, uint64_t val)
 {
-    if (d) {
-        APICCommonState *s = APIC_COMMON(d);
-        trace_cpu_get_apic_base((uint64_t)s->apicbase);
-        return s->apicbase;
-    } else {
+    APICCommonState *s;
+    APICCommonClass *info;
+
+    trace_cpu_set_apic_base(val);
+
+    if (!d) {
+       return;
+    }
+
+    get_apic_state(d, &s, &info);
+
+    info->set_base(s, val);
+}
+
+uint64_t cpu_get_apic_base(DeviceState *d) {
+
+    if (!d) {
         trace_cpu_get_apic_base(0);
         return 0;
     }
+
+    APICCommonState *s;
+    get_apic_state(d, &s, NULL);
+    trace_cpu_get_apic_base((uint64_t)s->apicbase);
+    return s->apicbase;
 }
 
 void cpu_set_apic_tpr(DeviceState *d, uint8_t val)
@@ -57,9 +85,7 @@ void cpu_set_apic_tpr(DeviceState *d, uint8_t val)
         return;
     }
 
-    s = APIC_COMMON(d);
-    info = APIC_COMMON_GET_CLASS(s);
-
+    get_apic_state(d, &s, &info);
     info->set_tpr(s, val);
 }
 
@@ -72,9 +98,7 @@ uint8_t cpu_get_apic_tpr(DeviceState *d)
         return 0;
     }
 
-    s = APIC_COMMON(d);
-    info = APIC_COMMON_GET_CLASS(s);
-
+    get_apic_state(d, &s, &info);
     return info->get_tpr(s);
 }
 

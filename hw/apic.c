@@ -309,8 +309,11 @@ static void apic_set_tpr(APICCommonState *s, uint8_t val)
 {
     /* Updates from cr8 are ignored while the VAPIC is active */
     if (!s->vapic_paddr) {
+        uint32_t old_tpr = s->tpr;
         s->tpr = val << 4;
-        apic_update_irq(s);
+        if (old_tpr != s->tpr) {
+            apic_update_irq(s);
+        }
     }
 }
 
