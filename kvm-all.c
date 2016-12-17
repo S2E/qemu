@@ -89,6 +89,10 @@ struct KVMState
     uint32_t *used_gsi_bitmap;
     unsigned int max_gsi;
 #endif
+
+#ifdef KVM_CAP_FORCE_EXIT
+    int force_exit;
+#endif
 };
 
 KVMState *kvm_state;
@@ -837,6 +841,14 @@ static void kvm_handle_interrupt(CPUArchState *env, int mask)
 {
     env->interrupt_request |= mask;
 
+    /**
+     * For user-space KVM implementations that cannot exit immediately
+     * when potential interrupts (signals) are pending.
+     */
+    if (kvm_state->force_exit) {
+        kvm_vm_ioctl(kvm_state, KVM_FORCE_EXIT, NULL);
+    }
+
     if (!qemu_cpu_is_self(env)) {
         qemu_cpu_kick(env);
     }
@@ -1066,6 +1078,10 @@ int kvm_init(void)
 
 #ifdef KVM_CAP_PIT_STATE2
     s->pit_state2 = kvm_check_extension(s, KVM_CAP_PIT_STATE2);
+#endif
+
+#ifdef KVM_CAP_FORCE_EXIT
+    s->force_exit = kvm_check_extension(s, KVM_CAP_FORCE_EXIT);
 #endif
 
     ret = kvm_arch_init(s);
