@@ -4720,8 +4720,9 @@ print_operand_value (char *buf, size_t bufsize, int hex, bfd_vma disp)
 	  buf[0] = '0';
 	  buf[1] = 'x';
           snprintf_vma (tmp, sizeof(tmp), disp);
-	  for (i = 0; tmp[i] == '0' && tmp[i + 1]; i++);
-          pstrcpy (buf + 2, bufsize - 2, tmp + i);
+      for (i = 0; tmp[i] == '0' && tmp[i + 1]; i++)
+          ;
+      pstrcpy (buf + 2, bufsize - 2, tmp + i);
 	}
       else
 	{

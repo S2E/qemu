@@ -1533,7 +1533,7 @@ static void print_pte(Monitor *mon, target_phys_addr_t addr,
 {
 #ifdef TARGET_X86_64
     if (addr & (1ULL << 47)) {
-        addr |= -1LL << 48;
+        addr |= (~(0ULL)) << 48;
     }
 #endif
     monitor_printf(mon, TARGET_FMT_plx ": " TARGET_FMT_plx
