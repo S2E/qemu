@@ -2724,6 +2724,19 @@ DEF("qtest-log", HAS_ARG, QEMU_OPTION_qtest_log,
     "-qtest-log LOG  specify tracing options\n",
     QEMU_ARCH_ALL)
 
+DEF("periodic-screenshot", HAS_ARG, QEMU_OPTION_periodic_screenshot, \
+    "-periodic-screenshot folder_name|file_name\n" \
+    "                periodically save a screenshot to the specified folder or file\n",
+    QEMU_ARCH_ALL)
+STEXI
+@item -periodic-screenshot @var{file}
+@findex -periodic-screenshot
+Periodically save a screenshot to the specified folder or file
+ETEXI
+
+
+
+
 HXCOMM This is the last statement. Insert new options before this line!
 STEXI
 @end table

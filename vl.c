@@ -233,6 +233,11 @@ uint8_t *boot_splash_filedata;
 int boot_splash_filedata_size;
 uint8_t qemu_extra_params_fw[2];
 
+const char *periodic_screenshot = NULL;
+
+static QEMUTimer *s_screenshot_timer;
+
+
 typedef struct FWBootEntry FWBootEntry;
 
 struct FWBootEntry {
@@ -2255,6 +2260,55 @@ int qemu_init_main_loop(void)
     return main_loop_init();
 }
 
+static void take_screenshot(void)
+{
+    static int count = 0;
+    static bool isdir = false;
+
+    if (count == 0) {
+        /* Initialize screenshot */
+        DIR *dir = opendir(periodic_screenshot);
+        if (dir) {
+            isdir = true;
+            closedir(dir);
+        } else {
+            if (!strstr(periodic_screenshot, ".png")) {
+                /* Directory is not ready yet, wait for next time */
+                return;
+            }
+        }
+    }
+
+    const char *actual_name;
+
+    if (isdir) {
+        char filename[512];
+        snprintf(filename, sizeof(filename) - 1, "%s/%d.png", periodic_screenshot, count);
+        actual_name = filename;
+    } else {
+        actual_name = periodic_screenshot;
+    }
+
+    vga_hw_screen_dump(actual_name);
+}
+
+static void screenshot_timer_handler(void *opaque)
+{
+    take_screenshot();
+    qemu_mod_timer(s_screenshot_timer, qemu_get_clock_ms(host_clock) + 5000);
+}
+
+static void screenshot_notify(Notifier *notifier, void *data)
+{
+    take_screenshot();
+}
+
+static Notifier s_screenshot_notifier = {
+    .notify = screenshot_notify
+};
+
+
+
 int main(int argc, char **argv, char **envp)
 {
     int i;
@@ -2898,9 +2952,14 @@ int main(int argc, char **argv, char **envp)
             case QEMU_OPTION_debugcon:
                 add_device_config(DEV_DEBUGCON, optarg);
                 break;
-	    case QEMU_OPTION_loadvm:
-		loadvm = optarg;
-		break;
+            case QEMU_OPTION_loadvm:
+                loadvm = optarg;
+                break;
+
+            case QEMU_OPTION_periodic_screenshot:
+                periodic_screenshot = optarg;
+                break;
+
             case QEMU_OPTION_full_screen:
                 full_screen = 1;
                 break;
@@ -3618,6 +3677,12 @@ int main(int argc, char **argv, char **envp)
      * when bus is created by qdev.c */
     qemu_register_reset(qbus_reset_all_fn, sysbus_get_default());
     qemu_run_machine_init_done_notifiers();
+
+    if (periodic_screenshot) {
+        s_screenshot_timer = qemu_new_timer_ms(host_clock, screenshot_timer_handler, NULL);
+        qemu_mod_timer(s_screenshot_timer, qemu_get_clock_ms(host_clock) + 1000);
+        qemu_add_exit_notifier(&s_screenshot_notifier);
+    }
 
     qemu_system_reset(VMRESET_SILENT);
     if (loadvm) {
