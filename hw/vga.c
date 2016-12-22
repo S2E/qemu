@@ -21,6 +21,9 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
  * THE SOFTWARE.
  */
+
+#include <png.h>
+
 #include "hw.h"
 #include "vga.h"
 #include "console.h"
@@ -2407,6 +2410,95 @@ int ppm_save(const char *filename, struct DisplaySurface *ds)
     return 0;
 }
 
+static int png_save(const char *filename, struct DisplaySurface *ds)
+{
+    int result = 0, x, y;
+    FILE *fp;
+    png_structp png_ptr;
+    png_infop info_ptr;
+    png_bytep row = NULL;
+    uint8_t *d, *d1;
+
+    // Open file for writing (binary mode)
+    fp = fopen(filename, "wb");
+    if (fp == NULL) {
+        fprintf(stderr, "png_save: could not open file %s for writing\n", filename);
+        result = -1;
+        goto err1;
+    }
+
+    // Initialize write structure
+    png_ptr = png_create_write_struct(PNG_LIBPNG_VER_STRING, NULL, NULL, NULL);
+    if (png_ptr == NULL) {
+        fprintf(stderr, "png_save: could not allocate write structure\n");
+        result = -1;
+        goto err2;
+    }
+
+    // Initialize info structure
+    info_ptr = png_create_info_struct(png_ptr);
+    if (info_ptr == NULL) {
+        fprintf(stderr, "png_save: could not allocate info struct\n");
+        result = -1;
+        goto err3;
+    }
+
+    // Setup Exception handling
+    if (setjmp(png_jmpbuf(png_ptr))) {
+        fprintf(stderr, "png_save:error during png creation\n");
+        result = -1;
+        goto err4;
+    }
+
+    png_init_io(png_ptr, fp);
+
+    // Write header (8 bit colour depth)
+    png_set_IHDR(png_ptr, info_ptr, ds->width, ds->height,
+                 8, PNG_COLOR_TYPE_RGB, PNG_INTERLACE_NONE,
+                 PNG_COMPRESSION_TYPE_BASE, PNG_FILTER_TYPE_BASE);
+
+    png_write_info(png_ptr, info_ptr);
+
+    // Allocate memory for one row (3 bytes per pixel - RGB)
+    row = (png_bytep) malloc(3 * ds->width * sizeof(png_byte));
+    if (!row) {
+        goto err4;
+    }
+
+    d1 = ds->data;
+    for (y = 0; y < ds->height; ++y) {
+        d = d1;
+        uint8_t *pbuf = row;
+        for (x = 0; x < ds->width; ++x) {
+            uint32_t v;
+            if (ds->pf.bits_per_pixel == 32)
+                v = *(uint32_t *)d;
+            else
+                v = (uint32_t) (*(uint16_t *)d);
+            /* Limited to 8 or fewer bits per channel: */
+            uint8_t r = ((v >> ds->pf.rshift) & ds->pf.rmax) << (8 - ds->pf.rbits);
+            uint8_t g = ((v >> ds->pf.gshift) & ds->pf.gmax) << (8 - ds->pf.gbits);
+            uint8_t b = ((v >> ds->pf.bshift) & ds->pf.bmax) << (8 - ds->pf.bbits);
+            *pbuf++ = r;
+            *pbuf++ = g;
+            *pbuf++ = b;
+            d += ds->pf.bytes_per_pixel;
+        }
+        png_write_row(png_ptr, row);
+        d1 += ds->linesize;
+    }
+
+    // End write
+    png_write_end(png_ptr, NULL);
+
+    err4: if (row)
+            free(row);
+          png_free_data(png_ptr, info_ptr, PNG_FREE_ALL, -1);
+    err3: png_destroy_write_struct(&png_ptr, (png_infopp) NULL);
+    err2: fclose(fp);
+    err1: return result;
+}
+
 /* save the vga display in a PPM image even if no display is
    available */
 static void vga_screen_dump(void *opaque, const char *filename, bool cswitch)
@@ -2417,5 +2509,10 @@ static void vga_screen_dump(void *opaque, const char *filename, bool cswitch)
         vga_invalidate_display(s);
     }
     vga_hw_update();
-    ppm_save(filename, s->ds->surface);
+
+    if (strstr(filename, ".png")) {
+        png_save(filename, s->ds->surface);
+    } else {
+        ppm_save(filename, s->ds->surface);
+    }
 }
