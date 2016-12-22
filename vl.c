@@ -29,6 +29,7 @@
 #include "qemu/cutils.h"
 #include "qemu/help_option.h"
 #include "qemu/uuid.h"
+#include "hmp.h"
 #include "sysemu/seccomp.h"
 
 #ifdef CONFIG_SDL
@@ -186,6 +187,9 @@ size_t boot_splash_filedata_size;
 uint8_t qemu_extra_params_fw[2];
 
 int icount_align_option;
+
+const char *periodic_screenshot = NULL;
+static QEMUTimer *s_screenshot_timer;
 
 /* The bytes in qemu_uuid are in the order specified by RFC4122, _not_ in the
  * little-endian "wire format" described in the SMBIOS 2.6 specification.
@@ -2907,6 +2911,52 @@ static void register_global_properties(MachineState *ms)
     user_register_global_props();
 }
 
+void qmp_screendump(const char *filename, bool has_device, const char *device,
+                    bool has_head, int64_t head, Error **errp);
+
+static void take_screenshot(void)
+{
+    static int count = 0;
+    static bool isdir = false;
+    Error *err = NULL;
+
+    if (count == 0) {
+        /* Initialize screenshot */
+        DIR *dir = opendir(periodic_screenshot);
+        if (dir) {
+            isdir = true;
+            closedir(dir);
+        } else {
+            if (!strstr(periodic_screenshot, ".png")) {
+                /* Directory is not ready yet, wait for next time */
+                return;
+            }
+        }
+    }
+
+    const char *actual_name;
+
+    if (isdir) {
+        char filename[512];
+        snprintf(filename, sizeof(filename) - 1, "%s/%d.png", periodic_screenshot, count++);
+        actual_name = filename;
+    } else {
+        actual_name = periodic_screenshot;
+    }
+
+    qmp_screendump(actual_name, false, NULL, false, 0, &err);
+    if (err)  {
+        error_report_err(err);
+    }
+}
+
+static void screenshot_timer_handler(void *opaque)
+{
+    take_screenshot();
+    timer_mod(s_screenshot_timer, (qemu_clock_get_ms(QEMU_CLOCK_HOST) + 5000) * 1000000);
+}
+
+
 int main(int argc, char **argv, char **envp)
 {
     int i;
@@ -3522,6 +3572,9 @@ int main(int argc, char **argv, char **envp)
                 break;
             case QEMU_OPTION_loadvm:
                 loadvm = optarg;
+                break;
+            case QEMU_OPTION_periodic_screenshot:
+                periodic_screenshot = optarg;
                 break;
             case QEMU_OPTION_full_screen:
                 dpy.has_full_screen = true;
@@ -4602,6 +4655,11 @@ int main(int argc, char **argv, char **envp)
         exit(1);
     }
 
+    if (periodic_screenshot) {
+        s_screenshot_timer = timer_new(QEMU_CLOCK_HOST, 1, screenshot_timer_handler, NULL);
+        timer_mod(s_screenshot_timer, qemu_clock_get_ms(QEMU_CLOCK_HOST) + 1000);
+    }
+
     replay_start();
 
     /* This checkpoint is required by replay to separate prior clock
@@ -4642,6 +4700,10 @@ int main(int argc, char **argv, char **envp)
     os_setup_post();
 
     main_loop();
+
+    if (periodic_screenshot) {
+        take_screenshot();
+    }
 
     gdbserver_cleanup();
 
