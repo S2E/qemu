@@ -988,6 +988,10 @@ void pc_memory_init(MemoryRegion *system_memory,
     memory_region_init_ram(ram, "pc.ram",
                            below_4g_mem_size + above_4g_mem_size);
     vmstate_register_ram_global(ram);
+
+    kvm_register_fixed_memory_region("pc.ram", (uintptr_t)memory_region_get_ram_ptr(ram),
+                                     below_4g_mem_size + above_4g_mem_size, 0);
+
     *ram_memory = ram;
     ram_below_4g = g_malloc(sizeof(*ram_below_4g));
     memory_region_init_alias(ram_below_4g, "ram-below-4g", ram,
@@ -1008,6 +1012,10 @@ void pc_memory_init(MemoryRegion *system_memory,
     option_rom_mr = g_malloc(sizeof(*option_rom_mr));
     memory_region_init_ram(option_rom_mr, "pc.rom", PC_ROM_SIZE);
     vmstate_register_ram_global(option_rom_mr);
+
+    kvm_register_fixed_memory_region("pc.rom", (uintptr_t) memory_region_get_ram_ptr(option_rom_mr),
+                                     PC_ROM_SIZE, 1);
+
     memory_region_add_subregion_overlap(rom_memory,
                                         PC_ROM_MIN_VGA,
                                         option_rom_mr,

@@ -34,6 +34,7 @@
 #include "qemu-timer.h"
 #include "xen.h"
 #include "trace.h"
+#include "kvm.h"
 
 //#define DEBUG_VGA
 //#define DEBUG_VGA_MEM
@@ -2257,6 +2258,9 @@ void vga_common_init(VGACommonState *s, int vga_ram_size)
     s->is_vbe_vmstate = 0;
 #endif
     memory_region_init_ram(&s->vram, "vga.vram", vga_ram_size);
+
+    kvm_register_fixed_memory_region("vga.vram", (uintptr_t) memory_region_get_ram_ptr(&s->vram), vga_ram_size, 1);
+
     vmstate_register_ram_global(&s->vram);
     xen_register_framebuffer(&s->vram);
     s->vram_ptr = memory_region_get_ram_ptr(&s->vram);

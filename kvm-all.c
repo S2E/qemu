@@ -93,6 +93,8 @@ struct KVMState
 #ifdef KVM_CAP_FORCE_EXIT
     int force_exit;
 #endif
+
+    int fixed_memory;
 };
 
 KVMState *kvm_state;
@@ -986,6 +988,24 @@ static int kvm_irqchip_create(KVMState *s)
     return 0;
 }
 
+#ifdef KVM_CAP_MEM_FIXED_REGION
+int kvm_register_fixed_memory_region(const char *name, uintptr_t start, uint64_t size, int shared_concrete)
+{
+    struct kvm_fixed_region reg;
+    reg.name = name;
+    reg.host_address = start;
+    reg.size = size;
+    reg.flags = shared_concrete ? KVM_MEM_SHARED_CONCRETE : 0;
+
+    return kvm_vm_ioctl(kvm_state, KVM_MEM_REGISTER_FIXED_REGION, &reg);
+}
+#else
+int kvm_register_fixed_memory_region(const char *name, uintptr_t start, uint64_t size, int shared_concrete)
+{
+    return -1;
+}
+#endif
+
 int kvm_init(void)
 {
     static const char upgrade_note[] =
@@ -1082,6 +1102,10 @@ int kvm_init(void)
 
 #ifdef KVM_CAP_FORCE_EXIT
     s->force_exit = kvm_check_extension(s, KVM_CAP_FORCE_EXIT);
+#endif
+
+#ifdef KVM_CAP_MEM_FIXED_REGION
+    s->fixed_memory = kvm_check_extension(s, KVM_CAP_MEM_FIXED_REGION);
 #endif
 
     ret = kvm_arch_init(s);

@@ -71,6 +71,9 @@ static void pc_isa_bios_init(MemoryRegion *rom_memory,
            isa_bios_size);
 
     memory_region_set_readonly(isa_bios, true);
+
+    kvm_register_fixed_memory_region("isa-bios", (uintptr_t) isa_bios_ptr, isa_bios_size, 1);
+    kvm_register_fixed_memory_region("flash-bios", (uintptr_t) flash_ptr, flash_size, 1);
 }
 
 static void pc_fw_add_pflash_drv(void)
@@ -151,6 +154,9 @@ static void old_pc_system_rom_init(MemoryRegion *rom_memory)
     }
     bios = g_malloc(sizeof(*bios));
     memory_region_init_ram(bios, "pc.bios", bios_size);
+
+    kvm_register_fixed_memory_region("pc.bios", (uintptr_t) memory_region_get_ram_ptr(bios), bios_size, 1);
+
     vmstate_register_ram_global(bios);
     memory_region_set_readonly(bios, true);
     ret = rom_add_file_fixed(bios_name, (uint32_t)(-bios_size), -1);
