@@ -94,7 +94,13 @@ struct KVMState
     int force_exit;
 #endif
 
+#ifdef KVM_CAP_MEM_FIXED_REGION
     int fixed_memory;
+#endif
+
+#ifdef KVM_CAP_MEM_RW
+    int mem_rw;
+#endif
 };
 
 KVMState *kvm_state;
@@ -1006,6 +1012,35 @@ int kvm_register_fixed_memory_region(const char *name, uintptr_t start, uint64_t
 }
 #endif
 
+#ifdef KVM_CAP_MEM_RW
+int kvm_has_mem_rw(void)
+{
+    return kvm_state->mem_rw;
+}
+
+int kvm_mem_rw(void *dest, const void *source, uint64_t size, int is_write)
+{
+    struct kvm_mem_rw rw;
+    rw.dest = (uintptr_t) dest;
+    rw.source = (uintptr_t) source;
+    rw.length = size;
+    rw.is_write = is_write;
+
+    return kvm_vm_ioctl(kvm_state, KVM_MEM_RW, &rw);
+}
+
+#else
+int kvm_has_mem_rw(void)
+{
+    return 0;
+}
+
+int kvm_mem_rw(void *dest, const void *source, uint64_t size, int is_write)
+{
+    return -1;
+}
+#endif
+
 int kvm_init(void)
 {
     static const char upgrade_note[] =
@@ -1106,6 +1141,10 @@ int kvm_init(void)
 
 #ifdef KVM_CAP_MEM_FIXED_REGION
     s->fixed_memory = kvm_check_extension(s, KVM_CAP_MEM_FIXED_REGION);
+#endif
+
+#ifdef KVM_CAP_MEM_RW
+    s->mem_rw = kvm_check_extension(s, KVM_CAP_MEM_RW);
 #endif
 
     ret = kvm_arch_init(s);

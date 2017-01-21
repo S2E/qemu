@@ -3824,7 +3824,9 @@ void cpu_physical_memory_rw(target_phys_addr_t addr, uint8_t *buf,
                     + section_addr(section, addr);
                 /* RAM case */
                 ptr = qemu_get_ram_ptr(addr1);
-                memcpy(ptr, buf, l);
+                if (!kvm_enabled() ||  kvm_mem_rw(ptr, buf, l, 1) < 0) {
+                    memcpy(ptr, buf, l);
+                }
                 if (!cpu_physical_memory_is_dirty(addr1)) {
                     /* invalidate code */
                     tb_invalidate_phys_page_range(addr1, addr1 + l, 0);
@@ -3859,7 +3861,9 @@ void cpu_physical_memory_rw(target_phys_addr_t addr, uint8_t *buf,
                 /* RAM case */
                 ptr = qemu_get_ram_ptr(section->mr->ram_addr
                                        + section_addr(section, addr));
-                memcpy(buf, ptr, l);
+                if (!kvm_enabled() ||  kvm_mem_rw(buf, ptr, l, 0) < 0) {
+                    memcpy(buf, ptr, l);
+                }
                 qemu_put_ram_ptr(ptr);
             }
         }
@@ -3893,7 +3897,9 @@ void cpu_physical_memory_write_rom(target_phys_addr_t addr,
                 + section_addr(section, addr);
             /* ROM/RAM case */
             ptr = qemu_get_ram_ptr(addr1);
-            memcpy(ptr, buf, l);
+            if (!kvm_enabled() ||  kvm_mem_rw(ptr, buf, l, 1) < 0) {
+                memcpy(ptr, buf, l);
+            }
             qemu_put_ram_ptr(ptr);
         }
         len -= l;
@@ -3909,6 +3915,30 @@ typedef struct {
 } BounceBuffer;
 
 static BounceBuffer bounce;
+
+/**
+ * Block devices may split big requests in chunks of 4K,
+ * each of them requiring one buffer.
+ */
+static unsigned s_max_bounce_buffers = 0;
+BounceBuffer *s_bounce_buffers = NULL;
+
+static BounceBuffer* bounce_buffer_alloc(void)
+{
+    int i;
+    for (i = 0; i < s_max_bounce_buffers; ++i) {
+        if (!s_bounce_buffers[i].buffer) {
+            return &s_bounce_buffers[i];
+        }
+    }
+
+    //Did not find any bounce buffer, allocate some more.
+    unsigned old_count = s_max_bounce_buffers;
+    s_max_bounce_buffers += 32;
+    s_bounce_buffers = g_renew(BounceBuffer, s_bounce_buffers, s_max_bounce_buffers);
+    memset(s_bounce_buffers + old_count, 0, s_max_bounce_buffers - old_count);
+    return &s_bounce_buffers[old_count];
+}
 
 typedef struct MapClient {
     void *opaque;
@@ -3959,49 +3989,66 @@ void *cpu_physical_memory_map(target_phys_addr_t addr,
                               target_phys_addr_t *plen,
                               int is_write)
 {
-    target_phys_addr_t len = *plen;
-    target_phys_addr_t todo = 0;
-    int l;
-    target_phys_addr_t page;
-    MemoryRegionSection *section;
-    ram_addr_t raddr = RAM_ADDR_MAX;
-    ram_addr_t rlen;
-    void *ret;
+    bool use_bounce_buffers = kvm_has_mem_rw();
+#ifdef CONFIG_SYMBEX
+    use_bounce_buffers = true;
+#endif
 
-    while (len > 0) {
-        page = addr & TARGET_PAGE_MASK;
-        l = (page + TARGET_PAGE_SIZE) - addr;
-        if (l > len)
-            l = len;
-        section = phys_page_find(page >> TARGET_PAGE_BITS);
+    if (!use_bounce_buffers) {
+        target_phys_addr_t len = *plen;
+        target_phys_addr_t todo = 0;
+        int l;
+        target_phys_addr_t page;
+        MemoryRegionSection *section;
+        ram_addr_t raddr = RAM_ADDR_MAX;
+        ram_addr_t rlen;
+        void *ret;
 
-        if (!(memory_region_is_ram(section->mr) && !section->readonly)) {
-            if (todo || bounce.buffer) {
-                break;
+        while (len > 0) {
+            page = addr & TARGET_PAGE_MASK;
+            l = (page + TARGET_PAGE_SIZE) - addr;
+            if (l > len)
+                l = len;
+            section = phys_page_find(page >> TARGET_PAGE_BITS);
+
+            if (!(memory_region_is_ram(section->mr) && !section->readonly)) {
+                if (todo || bounce.buffer) {
+                    break;
+                }
+                bounce.buffer = qemu_memalign(TARGET_PAGE_SIZE, TARGET_PAGE_SIZE);
+                bounce.addr = addr;
+                bounce.len = l;
+                if (!is_write) {
+                    cpu_physical_memory_read(addr, bounce.buffer, l);
+                }
+
+                *plen = l;
+                return bounce.buffer;
             }
-            bounce.buffer = qemu_memalign(TARGET_PAGE_SIZE, TARGET_PAGE_SIZE);
-            bounce.addr = addr;
-            bounce.len = l;
-            if (!is_write) {
-                cpu_physical_memory_read(addr, bounce.buffer, l);
+            if (!todo) {
+                raddr = memory_region_get_ram_addr(section->mr)
+                    + section_addr(section, addr);
             }
 
-            *plen = l;
-            return bounce.buffer;
+            len -= l;
+            addr += l;
+            todo += l;
         }
-        if (!todo) {
-            raddr = memory_region_get_ram_addr(section->mr)
-                + section_addr(section, addr);
-        }
+        rlen = todo;
+        ret = qemu_ram_ptr_length(raddr, &rlen);
+        *plen = rlen;
+        return ret;
+    } else {
+        BounceBuffer *buffer = bounce_buffer_alloc();
 
-        len -= l;
-        addr += l;
-        todo += l;
+        buffer->buffer = qemu_memalign(TARGET_PAGE_SIZE, *plen);
+        buffer->addr = addr;
+        buffer->len = *plen;
+        if (!is_write) {
+            cpu_physical_memory_rw(addr, buffer->buffer, *plen, 0);
+        }
+        return buffer->buffer;
     }
-    rlen = todo;
-    ret = qemu_ram_ptr_length(raddr, &rlen);
-    *plen = rlen;
-    return ret;
 }
 
 /* Unmaps a memory region previously mapped by cpu_physical_memory_map().
@@ -4011,6 +4058,25 @@ void *cpu_physical_memory_map(target_phys_addr_t addr,
 void cpu_physical_memory_unmap(void *buffer, target_phys_addr_t len,
                                int is_write, target_phys_addr_t access_len)
 {
+    bool use_bounce_buffers = kvm_has_mem_rw();
+
+    if (use_bounce_buffers) {
+        //Look for bounce buffers first
+        int i;
+        for (i = 0; i < s_max_bounce_buffers; ++i) {
+            if (s_bounce_buffers[i].buffer == buffer) {
+                if (is_write) {
+                    cpu_physical_memory_write(s_bounce_buffers[i].addr, s_bounce_buffers[i].buffer, access_len);
+                }
+
+                qemu_vfree(s_bounce_buffers[i].buffer);
+                s_bounce_buffers[i].buffer = NULL;
+                cpu_notify_map_clients();
+                return;
+            }
+        }
+    }
+
     if (buffer != bounce.buffer) {
         if (is_write) {
             ram_addr_t addr1 = qemu_ram_addr_from_host_nofail(buffer);
@@ -4026,6 +4092,7 @@ void cpu_physical_memory_unmap(void *buffer, target_phys_addr_t len,
                     cpu_physical_memory_set_dirty_flags(
                         addr1, (0xff & ~CODE_DIRTY_FLAG));
                 }
+
                 addr1 += l;
                 access_len -= l;
             }

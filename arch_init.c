@@ -438,7 +438,17 @@ int ram_load(QEMUFile *f, void *opaque, int version_id)
             }
 
             ch = qemu_get_byte(f);
-            memset(host, ch, TARGET_PAGE_SIZE);
+
+            if (kvm_enabled() && kvm_has_mem_rw()) {
+                uint8_t buffer[TARGET_PAGE_SIZE];
+                memset(buffer, ch, sizeof(buffer));
+                if (kvm_mem_rw(host, buffer, sizeof(buffer), 1) < 0) {
+                    return -EINVAL;
+                }
+            } else {
+                memset(host, ch, TARGET_PAGE_SIZE);
+            }
+
 #ifndef _WIN32
             if (ch == 0 &&
                 (!kvm_enabled() || kvm_has_sync_mmu())) {
@@ -449,8 +459,15 @@ int ram_load(QEMUFile *f, void *opaque, int version_id)
             void *host;
 
             host = host_from_stream_offset(f, addr, flags);
-
-            qemu_get_buffer(f, host, TARGET_PAGE_SIZE);
+            if (kvm_enabled() && kvm_has_mem_rw()) {
+                uint8_t buffer[TARGET_PAGE_SIZE];
+                qemu_get_buffer(f, buffer, sizeof(buffer));
+                if (kvm_mem_rw(host, buffer, sizeof(buffer), 1) < 0) {
+                    return -EINVAL;
+                }
+            } else {
+                qemu_get_buffer(f, host, TARGET_PAGE_SIZE);
+            }
         }
         error = qemu_file_get_error(f);
         if (error) {

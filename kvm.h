@@ -61,6 +61,8 @@ int kvm_has_gsi_routing(void);
 int kvm_allows_irq0_override(void);
 
 int kvm_register_fixed_memory_region(const char *name, uintptr_t start, uint64_t size, int shared_concrete);
+int kvm_mem_rw(void *dest, const void *source, uint64_t size, int is_write);
+int kvm_has_mem_rw(void);
 
 #ifdef NEED_CPU_H
 int kvm_init_vcpu(CPUArchState *env);

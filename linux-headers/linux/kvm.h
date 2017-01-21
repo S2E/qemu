@@ -1151,12 +1151,11 @@ struct kvm_s390_ucas_mapping {
 
 /* Available with KVM_CAP_MEM_RW */
 struct kvm_mem_rw {
+    /* source and dest are always host pointers */
     __u64 source;
     __u64 dest;
     __u64 is_write;
     __u64 length;
-    __u8 is_source_guest_phys;
-    __u8 is_dest_guest_phys;
 };
 #define KVM_MEM_RW		  _IOW(KVMIO,  0xf3, struct kvm_mem_rw)
 
