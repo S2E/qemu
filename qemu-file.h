@@ -70,6 +70,7 @@ QEMUFile *qemu_fdopen(int fd, const char *mode);
 QEMUFile *qemu_fopen_socket(int fd);
 QEMUFile *qemu_popen(FILE *popen_file, const char *mode);
 QEMUFile *qemu_popen_cmd(const char *command, const char *mode);
+QEMUFile *qemu_memfile_open(void);
 int qemu_stdio_fd(QEMUFile *f);
 void qemu_fflush(QEMUFile *f);
 int qemu_fclose(QEMUFile *f);
@@ -234,5 +235,14 @@ static inline void qemu_get_sbe64s(QEMUFile *f, int64_t *pv)
 
 int64_t qemu_ftell(QEMUFile *f);
 int64_t qemu_fseek(QEMUFile *f, int64_t pos, int whence);
+
+void *qemu_memfile_get_buffer(QEMUFile *f);
+void qemu_make_readable(QEMUFile *f);
+
+void *qemu_get_first_se(void);
+void *qemu_get_next_se(void *se);
+const char *qemu_get_se_idstr(void *se);
+void qemu_save_state(QEMUFile *f, void *se);
+void qemu_load_state(QEMUFile *f, void *se);
 
 #endif

@@ -105,6 +105,10 @@ struct KVMState
 #ifdef KVM_CAP_DISK_RW
     int disk_rw;
 #endif
+
+#ifdef KVM_CAP_DEV_SNAPSHOT
+    int dev_snapshot;
+#endif
 };
 
 KVMState *kvm_state;
@@ -1007,6 +1011,10 @@ int kvm_register_fixed_memory_region(const char *name, uintptr_t start, uint64_t
     reg.size = size;
     reg.flags = shared_concrete ? KVM_MEM_SHARED_CONCRETE : 0;
 
+    if (!kvm_enabled()) {
+        return -1;
+    }
+
     return kvm_vm_ioctl(kvm_state, KVM_MEM_REGISTER_FIXED_REGION, &reg);
 }
 #else
@@ -1019,6 +1027,10 @@ int kvm_register_fixed_memory_region(const char *name, uintptr_t start, uint64_t
 #ifdef KVM_CAP_MEM_RW
 int kvm_has_mem_rw(void)
 {
+    if (!kvm_enabled()) {
+        return 0;
+    }
+
     return kvm_state->mem_rw;
 }
 
@@ -1048,6 +1060,10 @@ int kvm_mem_rw(void *dest, const void *source, uint64_t size, int is_write)
 #ifdef KVM_CAP_DISK_RW
 int kvm_has_disk_rw(void)
 {
+    if (!kvm_enabled()) {
+        return 0;
+    }
+
     return kvm_state->disk_rw;
 }
 
@@ -1059,6 +1075,10 @@ int kvm_disk_rw(void *buffer, uint64_t sector, int count, int is_write)
     rw.sector = sector;
     rw.count = count;
     rw.is_write = is_write;
+
+    if (!kvm_enabled()) {
+        return -1;
+    }
 
     ret = kvm_vm_ioctl(kvm_state, KVM_DISK_RW, &rw);
     if (ret < 0) {
@@ -1081,6 +1101,118 @@ int kvm_disk_rw(void *buffer, uint64_t sector, int count, int is_write)
 
 #endif
 
+#ifdef KVM_CAP_DEV_SNAPSHOT
+static const char *s_blacklist[] = {"cpu", "block", "ram", NULL};
+static inline int is_dev_blacklisted(const char *dev)
+{
+    const char **it = &s_blacklist[0];
+    while (*it) {
+        if (!strcmp(dev, *it)) {
+            return 1;
+        }
+        ++it;
+    }
+    return 0;
+}
+
+static int kvm_dev_save_snapshot(void)
+{
+    int ret = -1;
+    void *se;
+    int64_t size;
+    struct kvm_dev_snapshot s;
+    QEMUFile *f = qemu_memfile_open();
+
+    for (se = qemu_get_first_se(); se != NULL; se = qemu_get_next_se(se)) {
+        const char *id = qemu_get_se_idstr(se);
+        if (is_dev_blacklisted(id)) {
+            continue;
+        }
+        qemu_save_state(f, se);
+    }
+    qemu_fflush(f);
+    size = qemu_ftell(f);
+    if (size < 0) {
+        goto err1;
+    }
+
+    if (qemu_fseek(f, 0, SEEK_SET) < 0) {
+        goto err1;
+    }
+
+    s.size = size;
+    s.buffer = (uintptr_t) qemu_memfile_get_buffer(f);
+    s.is_write = 1;
+
+    ret = kvm_vm_ioctl(kvm_state, KVM_DEV_SNAPSHOT, &s);
+
+err1:
+    if (ret < 0) {
+        fprintf(stderr, "Could not save device snapshot\n");
+        abort();
+    }
+
+    qemu_fclose(f);
+
+    return ret;
+}
+
+static int kvm_dev_restore_snapshot(void)
+{
+    int ret = 0;
+    uint8_t buffer[0x1000];
+    void *se;
+    struct kvm_dev_snapshot s;
+    QEMUFile *f = qemu_memfile_open();
+
+    s.buffer = (uintptr_t) buffer;
+    s.size = sizeof(buffer);
+    s.is_write = 0;
+    s.pos = 0;
+
+    do {
+        ret = kvm_vm_ioctl(kvm_state, KVM_DEV_SNAPSHOT, &s);
+        if (ret > 0) {
+            qemu_put_buffer(f, buffer, ret);
+            s.pos += ret;
+        }
+    } while (ret > 0);
+
+    if (ret < 0) {
+        goto err1;
+    }
+
+    qemu_fflush(f);
+    qemu_make_readable(f);
+
+    for (se = qemu_get_first_se(); se != NULL; se = qemu_get_next_se(se)) {
+        const char *id = qemu_get_se_idstr(se);
+        if (is_dev_blacklisted(id)) {
+            continue;
+        }
+
+        qemu_load_state(f, se);
+    }
+
+err1:
+    qemu_fclose(f);
+    return ret;
+}
+
+
+#else
+
+static int kvm_dev_save_snapshot(void)
+{
+    return -1;
+}
+
+static int kvm_dev_restore_snapshot(void)
+{
+    return -1;
+}
+
+#endif
 
 
 int kvm_init(void)
@@ -1191,6 +1323,10 @@ int kvm_init(void)
 
 #ifdef KVM_CAP_MEM_RW
     s->disk_rw = kvm_check_extension(s, KVM_CAP_DISK_RW);
+#endif
+
+#ifdef KVM_CAP_DEV_SNAPSHOT
+    s->dev_snapshot = kvm_check_extension(s, KVM_CAP_DEV_SNAPSHOT);
 #endif
 
     ret = kvm_arch_init(s);
@@ -1349,6 +1485,7 @@ int kvm_cpu_exec(CPUArchState *env)
 {
     struct kvm_run *run = env->kvm_run;
     int ret, run_ret;
+    int keep_io_thread_locked = 0;
 
     DPRINTF("kvm_cpu_exec()\n");
 
@@ -1358,26 +1495,32 @@ int kvm_cpu_exec(CPUArchState *env)
     }
 
     do {
-        if (env->kvm_vcpu_dirty) {
-            kvm_arch_put_registers(env, KVM_PUT_RUNTIME_STATE);
-            env->kvm_vcpu_dirty = 0;
-        }
+        if (!keep_io_thread_locked) {
+            if (env->kvm_vcpu_dirty) {
+                kvm_arch_put_registers(env, KVM_PUT_RUNTIME_STATE);
+                env->kvm_vcpu_dirty = 0;
+            }
 
-        kvm_arch_pre_run(env, run);
-        if (env->exit_request) {
-            DPRINTF("interrupt exit requested\n");
-            /*
-             * KVM requires us to reenter the kernel after IO exits to complete
-             * instruction emulation. This self-signal will ensure that we
-             * leave ASAP again.
-             */
-            qemu_cpu_kick_self();
+            kvm_arch_pre_run(env, run);
+            if (env->exit_request) {
+                DPRINTF("interrupt exit requested\n");
+                /*
+                 * KVM requires us to reenter the kernel after IO exits to complete
+                 * instruction emulation. This self-signal will ensure that we
+                 * leave ASAP again.
+                 */
+                qemu_cpu_kick_self();
+            }
+
+            qemu_mutex_unlock_iothread();
         }
-        qemu_mutex_unlock_iothread();
 
         run_ret = kvm_vcpu_ioctl(env, KVM_RUN, 0);
 
-        qemu_mutex_lock_iothread();
+        if (!keep_io_thread_locked) {
+            qemu_mutex_lock_iothread();
+        }
+
         kvm_arch_post_run(env, run);
 
         kvm_flush_coalesced_mmio_buffer();
@@ -1392,6 +1535,11 @@ int kvm_cpu_exec(CPUArchState *env)
                     strerror(-run_ret));
             abort();
         }
+
+        keep_io_thread_locked =
+                run->exit_reason == KVM_EXIT_FLUSH_DISK ||
+                run->exit_reason == KVM_EXIT_SAVE_DEV_STATE ||
+                run->exit_reason == KVM_EXIT_RESTORE_DEV_STATE;
 
         switch (run->exit_reason) {
         case KVM_EXIT_IO:
@@ -1427,6 +1575,19 @@ int kvm_cpu_exec(CPUArchState *env)
             break;
         case KVM_EXIT_INTERNAL_ERROR:
             ret = kvm_handle_internal_error(env, run);
+            break;
+        case KVM_EXIT_FLUSH_DISK:
+            qemu_aio_flush();
+            bdrv_flush_all();
+            ret = 0;
+            break;
+        case KVM_EXIT_SAVE_DEV_STATE:
+            kvm_dev_save_snapshot();
+            ret = 0;
+            break;
+        case KVM_EXIT_RESTORE_DEV_STATE:
+            kvm_dev_restore_snapshot();
+            ret = 0;
             break;
         default:
             DPRINTF("kvm_arch_handle_exit\n");

@@ -67,7 +67,6 @@ int kvm_has_mem_rw(void);
 int kvm_disk_rw(void *buffer, uint64_t sector, int count, int is_write);
 int kvm_has_disk_rw(void);
 
-
 #ifdef NEED_CPU_H
 int kvm_init_vcpu(CPUArchState *env);
 

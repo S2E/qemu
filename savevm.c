@@ -191,6 +191,77 @@ typedef struct QEMUFileSocket
     QEMUFile *file;
 } QEMUFileSocket;
 
+typedef struct QEMUFileMemory
+{
+    QEMUFile *file;
+    uint8_t *buffer;
+    size_t buffer_size;
+} QEMUFileMemory;
+
+void *qemu_memfile_get_buffer(QEMUFile *f)
+{
+    QEMUFileMemory *s = (QEMUFileMemory*) f->opaque;
+    return s->buffer;
+}
+
+static int qemu_memfile_get(void *opaque, uint8_t *buf, int64_t pos, int size)
+{
+    QEMUFileMemory *s = opaque;
+    int real_size;
+    if (pos + size <= s->buffer_size) {
+        real_size = size;
+    } else {
+        real_size = s->buffer_size - pos;
+    }
+
+    memcpy(buf, &s->buffer[pos], real_size);
+    return real_size;
+}
+
+static int qemu_memfile_put(void *opaque, const uint8_t *buf,
+                            int64_t pos, int size)
+{
+    QEMUFileMemory *s = opaque;
+    if (pos + size > s->buffer_size) {
+        s->buffer_size = pos + size;
+        s->buffer = g_realloc(s->buffer, s->buffer_size);
+    }
+
+    memcpy(&s->buffer[pos], buf, size);
+    return size;
+}
+
+
+static int qemu_memfile_close(void *opaque)
+{
+    QEMUFileMemory *s = opaque;
+    g_free(s->buffer);
+    g_free(s);
+    return 0;
+}
+
+QEMUFile *qemu_memfile_open(void)
+{
+    QEMUFileMemory *s;
+
+    s = g_malloc0(sizeof(QEMUFileMemory));
+
+    s->file = qemu_fopen_ops(s, qemu_memfile_put,
+                             qemu_memfile_get,
+                             qemu_memfile_close,
+                             NULL, NULL, NULL);
+    return s->file;
+}
+
+void qemu_make_readable(QEMUFile *f)
+{
+    f->buf_index = 0;
+    f->buf_offset = 0;
+    f->buf_size = 0;
+    f->is_write = 0;
+    f->last_error = 0;
+}
+
 static int socket_get_buffer(void *opaque, uint8_t *buf, int64_t pos, int size)
 {
     QEMUFileSocket *s = opaque;
@@ -1872,6 +1943,36 @@ typedef struct LoadStateEntry {
     int section_id;
     int version_id;
 } LoadStateEntry;
+
+void *qemu_get_first_se(void)
+{
+    return savevm_handlers.tqh_first;
+}
+
+void *qemu_get_next_se(void *se)
+{
+    SaveStateEntry *sse = (SaveStateEntry*)se;
+    return sse->entry.tqe_next;
+}
+
+const char *qemu_get_se_idstr(void *se)
+{
+    SaveStateEntry *sse = (SaveStateEntry*)se;
+    return sse->idstr;
+}
+
+void qemu_save_state(QEMUFile *f, void *se)
+{
+    SaveStateEntry *sse = (SaveStateEntry*)se;
+    vmstate_save(f, sse);
+}
+
+void qemu_load_state(QEMUFile *f, void *se)
+{
+    SaveStateEntry *sse = (SaveStateEntry*)se;
+    vmstate_load(f, sse, sse->version_id);
+}
+
 
 int qemu_loadvm_state(QEMUFile *f)
 {

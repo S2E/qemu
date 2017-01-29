@@ -173,6 +173,11 @@ struct kvm_pit_config {
 #define KVM_EXIT_EPR              23
 #define KVM_EXIT_SYSTEM_EVENT     24
 
+/* Symbolic execution exit codes */
+#define KVM_EXIT_FLUSH_DISK       100
+#define KVM_EXIT_SAVE_DEV_STATE   101
+#define KVM_EXIT_RESTORE_DEV_STATE   102
+
 /* For KVM_EXIT_INTERNAL_ERROR */
 /* Emulate instruction failed. */
 #define KVM_INTERNAL_ERROR_EMULATION	1
@@ -774,6 +779,9 @@ struct kvm_ppc_smmu_info {
 /* Indicates presence of in-kvm disk support */
 #define KVM_CAP_DISK_RW 257
 
+/* Indicates presence of device snapshots */
+#define KVM_CAP_DEV_SNAPSHOT 258
+
 /****************************************/
 
 #ifdef KVM_CAP_IRQ_ROUTING
@@ -1187,6 +1195,20 @@ struct kvm_disk_rw {
 };
 
 #define KVM_DISK_RW   _IOWR(KVMIO,  0xf6, struct kvm_disk_rw)
+
+/* Available with KVM_CAP_DEV_SNAPSHOT */
+struct kvm_dev_snapshot {
+    __u64 buffer;
+    /* If is_write == 0, indicates expected size in case of error */
+    __u32 size;
+
+    /* Only when is_write == 0, indicates the position from which reading the state */
+    __u32 pos;
+    __u8 is_write;
+};
+
+#define KVM_DEV_SNAPSHOT   _IOWR(KVMIO,  0xf7, struct kvm_dev_snapshot)
+
 
 
 
