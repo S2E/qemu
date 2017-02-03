@@ -121,6 +121,7 @@ int bdrv_file_open(BlockDriverState **pbs, const char *filename, int flags);
 int bdrv_open(BlockDriverState *bs, const char *filename, int flags,
               BlockDriver *drv);
 void bdrv_close(BlockDriverState *bs);
+int bdrv_reopen(BlockDriverState *bs);
 int bdrv_attach_dev(BlockDriverState *bs, void *dev);
 void bdrv_attach_dev_nofail(BlockDriverState *bs, void *dev);
 void bdrv_detach_dev(BlockDriverState *bs, void *dev);
@@ -225,6 +226,7 @@ int bdrv_flush(BlockDriverState *bs);
 int coroutine_fn bdrv_co_flush(BlockDriverState *bs);
 void bdrv_flush_all(void);
 void bdrv_close_all(void);
+void bdrv_reopen_all(void);
 void bdrv_drain_all(void);
 
 int bdrv_discard(BlockDriverState *bs, int64_t sector_num, int nb_sectors);

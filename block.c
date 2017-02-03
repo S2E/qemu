@@ -853,6 +853,28 @@ void bdrv_close_all(void)
     }
 }
 
+int bdrv_reopen(BlockDriverState *bs)
+{
+    if (!bs->drv || !bs->drv->bdrv_reopen) {
+        return -1;
+    }
+
+    return bs->drv->bdrv_reopen(bs);
+}
+
+/**
+ * Reopens all file descriptors opened by block drivers.
+ * This is can be used when forking new QEMU instances.
+ */
+void bdrv_reopen_all(void)
+{
+    BlockDriverState *bs;
+
+    QTAILQ_FOREACH(bs, &bdrv_states, list) {
+        bdrv_reopen(bs);
+    }
+}
+
 /*
  * Wait for pending requests to complete across all BlockDriverStates
  *

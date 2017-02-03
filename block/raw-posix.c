@@ -678,6 +678,16 @@ static void raw_close(BlockDriverState *bs)
     }
 }
 
+static int raw_reopen(BlockDriverState *bs)
+{
+    BDRVRawState *s = bs->opaque;
+    if (s->fd >= 0) {
+        raw_close(bs);
+        return raw_open(bs, bs->filename, s->bdrv_flags);
+    }
+    return 0;
+}
+
 static int raw_truncate(BlockDriverState *bs, int64_t offset)
 {
     BDRVRawState *s = bs->opaque;
@@ -933,6 +943,7 @@ static BlockDriver bdrv_file = {
     .bdrv_read = raw_read,
     .bdrv_write = raw_write,
     .bdrv_close = raw_close,
+    .bdrv_reopen = raw_reopen,
     .bdrv_create = raw_create,
     .bdrv_co_discard = raw_co_discard,
 #ifdef ENABLE_AIO
