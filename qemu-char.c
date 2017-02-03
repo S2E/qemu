@@ -2411,10 +2411,10 @@ static void tcp_chr_close(CharDriverState *chr)
     qemu_chr_be_event(chr, CHR_EVENT_CLOSED);
 }
 
-static CharDriverState *qemu_chr_open_socket(QemuOpts *opts)
+static CharDriverState *qemu_chr_open_socket_internal(CharDriverState *chr,
+                                                      TCPCharDriver *s,
+                                                      QemuOpts *opts)
 {
-    CharDriverState *chr = NULL;
-    TCPCharDriver *s = NULL;
     int fd = -1;
     int is_listen;
     int is_waitconnect;
@@ -2429,9 +2429,6 @@ static CharDriverState *qemu_chr_open_socket(QemuOpts *opts)
     is_unix        = qemu_opt_get(opts, "path") != NULL;
     if (!is_listen)
         is_waitconnect = 0;
-
-    chr = g_malloc0(sizeof(CharDriverState));
-    s = g_malloc0(sizeof(TCPCharDriver));
 
     if (is_unix) {
         if (is_listen) {
@@ -2473,6 +2470,7 @@ static CharDriverState *qemu_chr_open_socket(QemuOpts *opts)
             s->do_telnetopt = 1;
 
     } else {
+        chr->reopenable = 1;
         s->connected = 1;
         s->fd = fd;
         socket_set_nodelay(fd);
@@ -2506,9 +2504,40 @@ static CharDriverState *qemu_chr_open_socket(QemuOpts *opts)
  fail:
     if (fd >= 0)
         closesocket(fd);
-    g_free(s);
-    g_free(chr);
     return NULL;
+}
+
+static CharDriverState *qemu_chr_open_socket(QemuOpts *opts)
+{
+    CharDriverState *chr = NULL;
+    TCPCharDriver *s = NULL;
+
+    chr = g_malloc0(sizeof(CharDriverState));
+    s = g_malloc0(sizeof(TCPCharDriver));
+
+    if (!qemu_chr_open_socket_internal(chr, s, opts)) {
+        g_free(s);
+        g_free(chr);
+        return NULL;
+    }
+
+    return chr;
+}
+
+static int qemu_chr_reopen_socket(CharDriverState* chr, QemuOpts *opts)
+{
+    TCPCharDriver *s = (TCPCharDriver*) chr->opaque;
+    if (s->fd != -1) {
+        qemu_set_fd_handler2(s->fd, NULL, NULL, NULL, NULL);
+        close(s->fd);
+        s->fd = -1;
+    }
+
+
+    if (!qemu_chr_open_socket_internal(chr, (TCPCharDriver*) chr->opaque, opts)) {
+        return -1;
+    }
+    return 0;
 }
 
 /***********************************************************/
@@ -2583,8 +2612,9 @@ QemuOpts *qemu_chr_parse_compat(const char *label, const char *filename)
     QemuOpts *opts;
 
     opts = qemu_opts_create(qemu_find_opts("chardev"), label, 1);
-    if (NULL == opts)
+    if (NULL == opts) {
         return NULL;
+    }
 
     if (strstart(filename, "mon:", &p)) {
         filename = p;
@@ -2702,9 +2732,11 @@ fail:
 static const struct {
     const char *name;
     CharDriverState *(*open)(QemuOpts *opts);
+    int (*reopen)(CharDriverState *chr, QemuOpts *opts);
 } backend_table[] = {
     { .name = "null",      .open = qemu_chr_open_null },
-    { .name = "socket",    .open = qemu_chr_open_socket },
+    { .name = "socket",    .open = qemu_chr_open_socket,
+      .reopen = qemu_chr_reopen_socket},
     { .name = "udp",       .open = qemu_chr_open_udp },
     { .name = "msmouse",   .open = qemu_chr_open_msmouse },
     { .name = "vc",        .open = text_console_init },
@@ -2736,6 +2768,18 @@ static const struct {
     { .name = "spicevmc",     .open = qemu_chr_open_spice },
 #endif
 };
+
+void qemu_chr_reopen(void)
+{
+    CharDriverState *chr;
+
+    QTAILQ_FOREACH(chr, &chardevs, next) {
+        if (chr->reopenable) {
+            backend_table[chr->backend_index].reopen(chr, chr->opts);
+        }
+    }
+}
+
 
 CharDriverState *qemu_chr_new_from_opts(QemuOpts *opts,
                                     void (*init)(struct CharDriverState *s))
@@ -2769,6 +2813,9 @@ CharDriverState *qemu_chr_new_from_opts(QemuOpts *opts,
                 qemu_opt_get(opts, "backend"));
         return NULL;
     }
+
+    chr->backend_index = i;
+    chr->opts = opts;
 
     if (!chr->filename)
         chr->filename = g_strdup(qemu_opt_get(opts, "backend"));
@@ -2809,7 +2856,9 @@ CharDriverState *qemu_chr_new(const char *label, const char *filename, void (*in
     if (chr && qemu_opt_get_bool(opts, "mux", 0)) {
         monitor_init(chr, MONITOR_USE_READLINE);
     }
-    qemu_opts_del(opts);
+    //This breaks symbolic execution forking mechanism
+    //(now we have a memory leak, but it's not that big)
+    //qemu_opts_del(opts);
     return chr;
 }
 

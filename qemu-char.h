@@ -73,7 +73,10 @@ struct CharDriverState {
     char *label;
     char *filename;
     int opened;
+    int reopenable;
+    int backend_index;
     int avail_connections;
+    QemuOpts *opts;
     QTAILQ_ENTRY(CharDriverState) next;
 };
 
@@ -249,5 +252,8 @@ QString *qemu_chr_mem_to_qs(CharDriverState *chr);
 size_t qemu_chr_mem_osize(const CharDriverState *chr);
 
 CharDriverState *qemu_char_get_next_serial(void);
+
+/* Close and reopen all file descriptors */
+void qemu_chr_reopen(void);
 
 #endif
