@@ -1564,6 +1564,68 @@ static void main_loop(void)
     } while (!main_loop_should_exit());
 }
 
+static pthread_t s_main_loop_thread;
+volatile bool g_main_loop_thread_inited = false;
+
+static void *main_loop_thread(void *arg)
+{
+    os_setup_signal_handling();
+
+    qemu_init_cpu_loop();
+
+    int ret = 0;
+    if ((ret = main_loop_init())) {
+        fprintf(stderr, "qemu_init_main_loop failed ret=%d %s\n", ret, strerror(errno));
+        abort();
+    }
+
+    if (init_timer_alarm(0) < 0) {
+        fprintf(stderr, "Could not initialize timers\n");
+        abort();
+    }
+
+    g_main_loop_thread_inited = true;
+
+    main_loop();
+    bdrv_close_all();
+    pause_all_vcpus();
+    net_cleanup();
+    res_free();
+
+    /* Call exit explicitely to run atexit handlers, as this is not the main thread */
+    exit(0);
+    return NULL;
+}
+
+int respawn_main_thread(void)
+{
+    int ret;
+    pthread_attr_t attr;
+
+    ret = pthread_attr_init(&attr);
+    if (ret < 0) {
+        fprintf(stderr, "Could not init thread attributes\n");
+        goto err1;
+    }
+
+    ret = pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
+    if (ret < 0) {
+        fprintf(stderr, "Could not set detached state for thread\n");
+        goto err1;
+    }
+
+    ret = pthread_create(&s_main_loop_thread, &attr, main_loop_thread, NULL);
+    if (ret < 0) {
+        fprintf(stderr, "could not create timer thread\n");
+        goto err1;
+    }
+
+    pthread_attr_destroy(&attr);
+
+    err1:
+    return ret;
+}
+
 static void version(void)
 {
     printf("QEMU emulator version " QEMU_VERSION QEMU_PKGVERSION ", Copyright (c) 2003-2008 Fabrice Bellard\n");
@@ -3434,7 +3496,7 @@ int main(int argc, char **argv, char **envp)
 
     os_set_line_buffering();
 
-    if (init_timer_alarm() < 0) {
+    if (init_timer_alarm(true) < 0) {
         fprintf(stderr, "could not initialize alarm timer\n");
         exit(1);
     }

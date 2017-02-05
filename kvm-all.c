@@ -20,6 +20,7 @@
 
 #include <linux/kvm.h>
 
+#include "qemu-thread.h"
 #include "qemu-common.h"
 #include "qemu-barrier.h"
 #include "sysemu.h"
@@ -1214,6 +1215,29 @@ static int kvm_dev_restore_snapshot(void)
 
 #endif
 
+extern volatile bool g_main_loop_thread_inited;
+static void kvm_clone_process(CPUArchState *env)
+{
+    g_main_loop_thread_inited = false;
+
+    qemu_aio_flush();
+    bdrv_flush_all();
+
+    qemu_chr_reopen();
+    bdrv_reopen_all();
+
+    int ret = respawn_main_thread();
+    if (ret < 0) {
+        fprintf(stderr, "could not create main loop thread\n");
+        abort();
+    }
+
+    while (!g_main_loop_thread_inited);
+
+    qemu_mutex_lock_iothread();
+    qemu_thread_get_self(env->thread);
+    env->thread_id = qemu_get_thread_id();
+}
 
 int kvm_init(void)
 {
@@ -1587,6 +1611,10 @@ int kvm_cpu_exec(CPUArchState *env)
             break;
         case KVM_EXIT_RESTORE_DEV_STATE:
             kvm_dev_restore_snapshot();
+            ret = 0;
+            break;
+        case KVM_EXIT_CLONE_PROCESS:
+            kvm_clone_process(env);
             ret = 0;
             break;
         default:

@@ -274,6 +274,8 @@ bool tcg_enabled(void);
 
 void cpu_exec_init_all(void);
 
+int respawn_main_thread(void);
+
 /* CPU save/load.  */
 void cpu_save(QEMUFile *f, void *opaque);
 int cpu_load(QEMUFile *f, void *opaque, int version_id);

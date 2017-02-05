@@ -177,6 +177,8 @@ struct kvm_pit_config {
 #define KVM_EXIT_FLUSH_DISK       100
 #define KVM_EXIT_SAVE_DEV_STATE   101
 #define KVM_EXIT_RESTORE_DEV_STATE   102
+#define KVM_EXIT_CLONE_PROCESS   103
+
 
 /* For KVM_EXIT_INTERNAL_ERROR */
 /* Emulate instruction failed. */
