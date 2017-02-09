@@ -101,6 +101,10 @@ struct KVMState
 #ifdef KVM_CAP_MEM_RW
     int mem_rw;
 #endif
+
+#ifdef KVM_CAP_DISK_RW
+    int disk_rw;
+#endif
 };
 
 KVMState *kvm_state;
@@ -1041,6 +1045,44 @@ int kvm_mem_rw(void *dest, const void *source, uint64_t size, int is_write)
 }
 #endif
 
+#ifdef KVM_CAP_DISK_RW
+int kvm_has_disk_rw(void)
+{
+    return kvm_state->disk_rw;
+}
+
+int kvm_disk_rw(void *buffer, uint64_t sector, int count, int is_write)
+{
+    int ret;
+    struct kvm_disk_rw rw;
+    rw.host_address = (uintptr_t) buffer;
+    rw.sector = sector;
+    rw.count = count;
+    rw.is_write = is_write;
+
+    ret = kvm_vm_ioctl(kvm_state, KVM_DISK_RW, &rw);
+    if (ret < 0) {
+        return ret;
+    }
+
+    return rw.count;
+}
+
+#else
+int kvm_has_disk_rw(void)
+{
+    return 0;
+}
+
+int kvm_disk_rw(void *buffer, uint64_t sector, int count, int is_write)
+{
+    return -1;
+}
+
+#endif
+
+
+
 int kvm_init(void)
 {
     static const char upgrade_note[] =
@@ -1145,6 +1187,10 @@ int kvm_init(void)
 
 #ifdef KVM_CAP_MEM_RW
     s->mem_rw = kvm_check_extension(s, KVM_CAP_MEM_RW);
+#endif
+
+#ifdef KVM_CAP_MEM_RW
+    s->disk_rw = kvm_check_extension(s, KVM_CAP_DISK_RW);
 #endif
 
     ret = kvm_arch_init(s);

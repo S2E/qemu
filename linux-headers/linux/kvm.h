@@ -771,6 +771,9 @@ struct kvm_ppc_smmu_info {
 /* Indicates presence of fixed memory region support */
 #define KVM_CAP_MEM_FIXED_REGION 256
 
+/* Indicates presence of in-kvm disk support */
+#define KVM_CAP_DISK_RW 257
+
 /****************************************/
 
 #ifdef KVM_CAP_IRQ_ROUTING
@@ -1171,6 +1174,19 @@ struct kvm_fixed_region {
     __u32 flags;
 };
 #define KVM_MEM_REGISTER_FIXED_REGION   _IOW(KVMIO,  0xf5, struct kvm_fixed_region)
+
+/* Available with KVM_CAP_DISK_RW */
+struct kvm_disk_rw {
+    /* Address of the buffer in host memory */
+    __u64 host_address;
+    /* 512-byte sectors */
+    __u64 sector;
+    /* input: sectors to read/write, output: sectors read/written */
+    __u32 count;
+    __u8 is_write;
+};
+
+#define KVM_DISK_RW   _IOWR(KVMIO,  0xf6, struct kvm_disk_rw)
 
 
 
