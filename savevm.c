@@ -193,7 +193,7 @@ static void qemu_savevm_timer(void *opaque)
         g_savevm_snapshot_taken = 1;
 
         if (g_savevm_exit) {
-            exit(-1);
+            exit(0);
         }
     } else {
         qemu_mod_timer(timer, qemu_get_clock_ms(host_clock) + 1000);
