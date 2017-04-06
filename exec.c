@@ -3990,9 +3990,6 @@ void *cpu_physical_memory_map(target_phys_addr_t addr,
                               int is_write)
 {
     bool use_bounce_buffers = kvm_has_mem_rw();
-#ifdef CONFIG_SYMBEX
-    use_bounce_buffers = true;
-#endif
 
     if (!use_bounce_buffers) {
         target_phys_addr_t len = *plen;
