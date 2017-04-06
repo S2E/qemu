@@ -3742,6 +3742,8 @@ int main(int argc, char **argv, char **envp)
     qemu_register_reset(qbus_reset_all_fn, sysbus_get_default());
     qemu_run_machine_init_done_notifiers();
 
+    qemu_initialize_savevm_timer();
+
     if (periodic_screenshot) {
         s_screenshot_timer = qemu_new_timer_ms(host_clock, screenshot_timer_handler, NULL);
         qemu_mod_timer(s_screenshot_timer, qemu_get_clock_ms(host_clock) + 1000);
