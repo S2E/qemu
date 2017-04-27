@@ -609,7 +609,8 @@ static int slirp_guestfwd(SlirpState *s, const char *config_str,
         }
     }
     port = strtol(buf, &end, 10);
-    if (*end != '\0' || port < 1 || port > 65535) {
+    /* port 0 means all ports on the target host */
+    if (*end != '\0' || port > 65535) {
         goto fail_syntax;
     }
 

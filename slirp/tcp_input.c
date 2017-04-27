@@ -351,7 +351,7 @@ findso:
              * happens to be a guestfwd.
              */
 	        for (ex_ptr = slirp->exec_list; ex_ptr; ex_ptr = ex_ptr->ex_next) {
-	            if (ex_ptr->ex_fport == ti->ti_dport &&
+                if ((!ex_ptr->ex_fport || (ex_ptr->ex_fport == ti->ti_dport)) &&
 	                ti->ti_dst.s_addr == ex_ptr->ex_addr.s_addr) {
 	                break;
 	            }
