@@ -238,6 +238,8 @@ int serial_commands_enabled = 0;
 
 static QEMUTimer *s_screenshot_timer;
 
+static const char *savevm_on_reboot = NULL;
+
 
 typedef struct FWBootEntry FWBootEntry;
 
@@ -1542,6 +1544,21 @@ static bool main_loop_should_exit(void)
     }
     if (qemu_vmstop_requested(&r)) {
         vm_stop(r);
+    }
+    if (savevm_on_reboot) {
+        printf("Saving VM (%s)\n", savevm_on_reboot);
+        QDict *qdict = qdict_new();
+        qdict_put_obj(qdict, "name",
+                      QOBJECT(qstring_from_str(savevm_on_reboot)));
+
+        do_savevm(cur_mon, qdict);
+
+        monitor_protocol_event(QEVENT_SHUTDOWN, NULL);
+        if (no_shutdown) {
+            vm_stop(RUN_STATE_SHUTDOWN);
+        } else {
+            return true;
+        }
     }
     return false;
 }
@@ -3017,6 +3034,9 @@ int main(int argc, char **argv, char **envp)
                 break;
             case QEMU_OPTION_loadvm:
                 loadvm = optarg;
+                break;
+            case QEMU_OPTION_savevm_on_reboot:
+                savevm_on_reboot = optarg;
                 break;
             case QEMU_OPTION_periodic_screenshot:
                 periodic_screenshot = optarg;
