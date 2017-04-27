@@ -235,6 +235,7 @@ uint8_t qemu_extra_params_fw[2];
 
 const char *periodic_screenshot = NULL;
 int serial_commands_enabled = 0;
+int dont_save_slirp = 0;
 
 static QEMUTimer *s_screenshot_timer;
 
@@ -3037,6 +3038,9 @@ int main(int argc, char **argv, char **envp)
                 break;
             case QEMU_OPTION_savevm_on_reboot:
                 savevm_on_reboot = optarg;
+                break;
+            case QEMU_OPTION_dont_save_slirp:
+                dont_save_slirp = 1;
                 break;
             case QEMU_OPTION_periodic_screenshot:
                 periodic_screenshot = optarg;

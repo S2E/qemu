@@ -2753,6 +2753,14 @@ STEXI
 Save state on machine reboot
 ETEXI
 
+DEF("dont-save-slirp", 0, QEMU_OPTION_dont_save_slirp, \
+    "-dont-save-slirp do not save slirp state in the snapshot\n", QEMU_ARCH_ALL)
+STEXI
+@item -dont-save-slirp
+@findex -dont-save-slirp
+Saves a snapshot but skip user mode networking.
+ETEXI
+
 HXCOMM This is the last statement. Insert new options before this line!
 STEXI
 @end table
