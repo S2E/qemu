@@ -1770,6 +1770,8 @@ int qemu_savevm_state_iterate(QEMUFile *f)
     return ret;
 }
 
+extern int dont_save_slirp;
+
 int qemu_savevm_state_complete(QEMUFile *f)
 {
     SaveStateEntry *se;
@@ -1796,6 +1798,11 @@ int qemu_savevm_state_complete(QEMUFile *f)
 
 	if (se->save_state == NULL && se->vmsd == NULL)
 	    continue;
+
+        if (dont_save_slirp && !strcmp(se->idstr, "slirp")) {
+            printf("Skipping slirp...\n");
+            continue;
+        }
 
         /* Section type */
         qemu_put_byte(f, QEMU_VM_SECTION_FULL);
