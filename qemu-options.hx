@@ -2743,6 +2743,16 @@ Checks the character stream sent by the guest to the serial port and
 interprets any commands that might be there. Useful for unattended setup tasks.
 ETEXI
 
+DEF("savevm-on-reboot", HAS_ARG, QEMU_OPTION_savevm_on_reboot, \
+    "-savevm-on-reboot [tag|id]\n" \
+    "                  save state on machine reboot\n",
+    QEMU_ARCH_ALL)
+STEXI
+@item -savevm-on-reboot @var{file}
+@findex -savevm-on-reboot
+Save state on machine reboot
+ETEXI
+
 HXCOMM This is the last statement. Insert new options before this line!
 STEXI
 @end table
