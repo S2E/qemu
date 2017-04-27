@@ -622,6 +622,12 @@ static int slirp_guestfwd(SlirpState *s, const char *config_str,
                          "rule '%s'", config_str);
             return -1;
         }
+    } else if ((strlen(p) > 4) && !strncmp(p, "cmd:", 4)) {
+        if (slirp_add_exec(s->slirp, 0, &p[4], &server, port) < 0) {
+            error_report("conflicting/invalid host:port in guest forwarding "
+                         "rule '%s'", config_str);
+            return -1;
+        }
     } else {
         fwd = g_malloc(sizeof(struct GuestFwd));
         fwd->hd = qemu_chr_new(buf, p, NULL);
