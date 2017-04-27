@@ -812,6 +812,13 @@ int slirp_add_exec(Slirp *slirp, int do_pty, const void *args,
                     htons(guest_port));
 }
 
+int slirp_add_exec_nocheck(Slirp *slirp, int do_pty, const void *args,
+                           struct in_addr *guest_addr, int guest_port)
+{
+    return add_exec(&slirp->exec_list, do_pty, (char *)args, *guest_addr,
+                    htons(guest_port));
+}
+
 ssize_t slirp_send(struct socket *so, const void *buf, size_t len, int flags)
 {
 	if (so->s == -1 && so->extra) {
