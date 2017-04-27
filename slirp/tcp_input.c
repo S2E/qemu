@@ -316,16 +316,6 @@ tcp_input(struct mbuf *m, int iphlen, struct socket *inso)
 	m->m_data += sizeof(struct tcpiphdr)+off-sizeof(struct tcphdr);
 	m->m_len  -= sizeof(struct tcpiphdr)+off-sizeof(struct tcphdr);
 
-    if (slirp->restricted) {
-        for (ex_ptr = slirp->exec_list; ex_ptr; ex_ptr = ex_ptr->ex_next) {
-            if (ex_ptr->ex_fport == ti->ti_dport &&
-                ti->ti_dst.s_addr == ex_ptr->ex_addr.s_addr) {
-                break;
-            }
-        }
-        if (!ex_ptr)
-            goto drop;
-    }
 	/*
 	 * Locate pcb for segment.
 	 */
@@ -354,31 +344,47 @@ findso:
 	 * the only flag set, then create a session, mark it
 	 * as if it was LISTENING, and continue...
 	 */
-        if (so == NULL) {
-	  if ((tiflags & (TH_SYN|TH_FIN|TH_RST|TH_URG|TH_ACK)) != TH_SYN)
-	    goto dropwithreset;
+	if (so == NULL) {
+	    if (slirp->restricted) {
+            /* Any hostfwds will have an existing socket, so we only get here
+             * for non-hostfwd connections. These should be dropped, unless it
+             * happens to be a guestfwd.
+             */
+	        for (ex_ptr = slirp->exec_list; ex_ptr; ex_ptr = ex_ptr->ex_next) {
+	            if (ex_ptr->ex_fport == ti->ti_dport &&
+	                ti->ti_dst.s_addr == ex_ptr->ex_addr.s_addr) {
+	                break;
+	            }
+	        }
+	        if (!ex_ptr) {
+	            goto dropwithreset;
+	        }
+	    }
 
-	  if ((so = socreate(slirp)) == NULL)
-	    goto dropwithreset;
-	  if (tcp_attach(so) < 0) {
-	    free(so); /* Not sofree (if it failed, it's not insqued) */
-	    goto dropwithreset;
-	  }
+	    if ((tiflags & (TH_SYN|TH_FIN|TH_RST|TH_URG|TH_ACK)) != TH_SYN)
+	        goto dropwithreset;
 
-	  sbreserve(&so->so_snd, TCP_SNDSPACE);
-	  sbreserve(&so->so_rcv, TCP_RCVSPACE);
+	    if ((so = socreate(slirp)) == NULL)
+	        goto dropwithreset;
+	    if (tcp_attach(so) < 0) {
+	        free(so); /* Not sofree (if it failed, it's not insqued) */
+	        goto dropwithreset;
+	    }
 
-	  so->so_laddr = ti->ti_src;
-	  so->so_lport = ti->ti_sport;
-	  so->so_faddr = ti->ti_dst;
-	  so->so_fport = ti->ti_dport;
+	    sbreserve(&so->so_snd, TCP_SNDSPACE);
+	    sbreserve(&so->so_rcv, TCP_RCVSPACE);
 
-	  if ((so->so_iptos = tcp_tos(so)) == 0)
-	    so->so_iptos = ((struct ip *)ti)->ip_tos;
+	    so->so_laddr = ti->ti_src;
+	    so->so_lport = ti->ti_sport;
+	    so->so_faddr = ti->ti_dst;
+	    so->so_fport = ti->ti_dport;
 
-	  tp = sototcpcb(so);
-	  tp->t_state = TCPS_LISTEN;
-	}
+	    if ((so->so_iptos = tcp_tos(so)) == 0)
+	        so->so_iptos = ((struct ip *)ti)->ip_tos;
+
+	    tp = sototcpcb(so);
+	    tp->t_state = TCPS_LISTEN;
+    }
 
         /*
          * If this is a still-connecting socket, this probably
