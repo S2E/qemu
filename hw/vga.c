@@ -2509,6 +2509,14 @@ static void vga_screen_dump(void *opaque, const char *filename, bool cswitch)
 {
     VGACommonState *s = opaque;
 
+    DisplaySurface *ds = s->ds->surface;
+    if (ds->flags & QEMU_REALPIXELS_FLAG) {
+        // SDL may be deallocated at this point
+        if (!ds->data) {
+            return;
+        }
+    }
+
     if (cswitch) {
         vga_invalidate_display(s);
     }
