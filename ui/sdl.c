@@ -34,6 +34,7 @@
 #include "x_keymap.h"
 #include "sdl_zoom.h"
 
+static DisplayState *s_ds;
 static DisplayChangeListener *dcl;
 static SDL_Surface *real_screen;
 static SDL_Surface *guest_screen = NULL;
@@ -946,6 +947,10 @@ static void sdl_mouse_define(QEMUCursor *c)
 
 static void sdl_cleanup(void)
 {
+    if (s_ds && s_ds->surface) {
+        s_ds->surface->data = NULL;
+    }
+
     if (guest_sprite)
         SDL_FreeCursor(guest_sprite);
     SDL_QuitSubSystem(SDL_INIT_VIDEO);
@@ -1048,4 +1053,6 @@ void sdl_display_init(DisplayState *ds, int full_screen, int no_frame)
     sdl_cursor_normal = SDL_GetCursor();
 
     atexit(sdl_cleanup);
+
+    s_ds = ds;
 }
