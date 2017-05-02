@@ -2364,7 +2364,7 @@ static void take_screenshot(void)
 
     if (isdir) {
         char filename[512];
-        snprintf(filename, sizeof(filename) - 1, "%s/%d.png", periodic_screenshot, count);
+        snprintf(filename, sizeof(filename) - 1, "%s/%d.png", periodic_screenshot, count++);
         actual_name = filename;
     } else {
         actual_name = periodic_screenshot;
