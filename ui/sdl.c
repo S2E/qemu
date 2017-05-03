@@ -947,10 +947,6 @@ static void sdl_mouse_define(QEMUCursor *c)
 
 static void sdl_cleanup(void)
 {
-    if (s_ds && s_ds->surface) {
-        s_ds->surface->data = NULL;
-    }
-
     if (guest_sprite)
         SDL_FreeCursor(guest_sprite);
     SDL_QuitSubSystem(SDL_INIT_VIDEO);
