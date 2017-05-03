@@ -2381,6 +2381,11 @@ static void screenshot_timer_handler(void *opaque)
 
 static void screenshot_notify(Notifier *notifier, void *data)
 {
+    // SDL may be destroyed on shutdown
+    if (display_type == DT_SDL) {
+        return;
+    }
+
     take_screenshot();
 }
 
