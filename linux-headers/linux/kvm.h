@@ -333,6 +333,9 @@ struct kvm_run {
         struct kvm_sync_regs regs;
         char padding[1024];
     } s;
+
+    /* Share timer's clock scaling over KVM */
+    int32_t cpu_clock_scale_factor;
 };
 
 /* for KVM_REGISTER_COALESCED_MMIO / KVM_UNREGISTER_COALESCED_MMIO */
@@ -769,8 +772,11 @@ struct kvm_ppc_smmu_info {
 #define KVM_CAP_PPC_ENABLE_HCALL 104
 #define KVM_CAP_CHECK_EXTENSION_VM 105
 
-/***** custom capability for symbolic execution support *****/
+/***** custom capabilities for symbolic execution support *****/
 #define KVM_CAP_MEM_RW 1021
+
+/* This capability allows a clock to be slowed down via a clock scaling factor */
+#define KVM_CAP_CPU_CLOCK_SCALE 1022
 
 /* This capability forces CPU exit */
 #define KVM_CAP_FORCE_EXIT 255
