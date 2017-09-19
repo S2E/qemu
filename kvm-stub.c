@@ -42,6 +42,16 @@ int kvm_init(void)
     return -ENOSYS;
 }
 
+int kvm_register_fixed_memory_region(const char *name, uintptr_t start, uint64_t size, int shared_concrete)
+{
+    return -1;
+}
+
+int kvm_has_mem_rw(void)
+{
+    return 0;
+}
+
 void kvm_flush_coalesced_mmio_buffer(void)
 {
 }
