@@ -25,7 +25,7 @@ qemu_irq *armv7m_init(MemoryRegion *address_space_mem,
 
 /* arm_boot.c */
 struct arm_boot_info {
-    int ram_size;
+    uint64_t ram_size;
     const char *kernel_filename;
     const char *kernel_cmdline;
     const char *initrd_filename;
@@ -45,9 +45,9 @@ struct arm_boot_info {
     /* multicore boards that use the default secondary core boot functions
      * can ignore these two function calls. If the default functions won't
      * work, then write_secondary_boot() should write a suitable blob of
-     * code mimicing the secondary CPU startup process used by the board's
+     * code mimicking the secondary CPU startup process used by the board's
      * boot loader/boot ROM code, and secondary_cpu_reset_hook() should
-     * perform any necessary CPU reset handling and set the PC for thei
+     * perform any necessary CPU reset handling and set the PC for the
      * secondary CPUs to point at this boot blob.
      */
     void (*write_secondary_boot)(CPUARMState *env,

@@ -79,7 +79,7 @@ struct arm_boot_info;
 typedef struct CPUARMState {
     /* Regs for current mode.  */
     uint32_t regs[16];
-    /* Frequently accessed CPSR bits are stored separately for efficiently.
+    /* Frequently accessed CPSR bits are stored separately for efficiency.
        This contains all the other bits.  Use cpsr_{read,write} to access
        the whole CPSR.  */
     uint32_t uncached_cpsr;
@@ -242,6 +242,7 @@ CPUARMState *cpu_arm_init(const char *cpu_model);
 void arm_translate_init(void);
 int cpu_arm_exec(CPUARMState *s);
 void do_interrupt(CPUARMState *);
+int bank_number(CPUARMState *env, int mode);
 void switch_mode(CPUARMState *, int);
 uint32_t do_arm_semihosting(CPUARMState *env);
 

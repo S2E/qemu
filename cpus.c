@@ -488,7 +488,7 @@ static bool cpu_thread_is_idle(CPUArchState *env)
         return true;
     }
     if (!env->halted || qemu_cpu_has_work(env) ||
-        (kvm_enabled() && kvm_irqchip_in_kernel())) {
+        kvm_async_interrupts_enabled()) {
         return false;
     }
     return true;
