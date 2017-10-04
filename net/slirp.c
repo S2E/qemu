@@ -70,7 +70,7 @@ typedef struct SlirpState {
     QTAILQ_ENTRY(SlirpState) entry;
     Slirp *slirp;
 #ifndef _WIN32
-    char smb_dir[128];
+    gchar *smb_dir;
 #endif
 } SlirpState;
 
@@ -465,11 +465,10 @@ int net_slirp_redir(const char *redir_str)
 /* automatic user mode samba server configuration */
 static void slirp_smb_cleanup(SlirpState *s)
 {
-    char cmd[128];
     int ret;
 
-    if (s->smb_dir[0] != '\0') {
-        snprintf(cmd, sizeof(cmd), "rm -rf %s", s->smb_dir);
+    if (s->smb_dir) {
+        gchar *cmd = g_strdup_printf("rm -rf %s", s->smb_dir);
         ret = system(cmd);
         if (ret == -1 || !WIFEXITED(ret)) {
             error_report("'%s' failed.", cmd);
@@ -477,30 +476,32 @@ static void slirp_smb_cleanup(SlirpState *s)
             error_report("'%s' failed. Error code: %d",
                          cmd, WEXITSTATUS(ret));
         }
-        s->smb_dir[0] = '\0';
+        g_free(cmd);
+        g_free(s->smb_dir);
+        s->smb_dir = NULL;
     }
 }
 
 static int slirp_smb(SlirpState* s, const char *exported_dir,
                      struct in_addr vserver_addr)
 {
-    char smb_conf[128];
-    char smb_cmdline[128];
+    char *smb_conf;
+    char *smb_cmdline;
     FILE *f;
 
-    snprintf(s->smb_dir, sizeof(s->smb_dir), "/tmp/qemu-smb.XXXXXX");
-    if (!mkdtemp(s->smb_dir)) {
-        error_report("could not create samba server dir '%s'", s->smb_dir);
-        s->smb_dir[0] = 0;
+    s->smb_dir = g_dir_make_tmp("qemu-smb.XXXXXX", NULL);
+    if (!s->smb_dir) {
+        error_report("could not create samba server dir");
         return -1;
     }
-    snprintf(smb_conf, sizeof(smb_conf), "%s/%s", s->smb_dir, "smb.conf");
+    smb_conf = g_strdup_printf("%s/%s", s->smb_dir, "smb.conf");
 
     f = fopen(smb_conf, "w");
     if (!f) {
         slirp_smb_cleanup(s);
         error_report("could not create samba server configuration file '%s'",
                      smb_conf);
+        g_free(smb_conf);
         return -1;
     }
     fprintf(f,
@@ -526,14 +527,17 @@ static int slirp_smb(SlirpState* s, const char *exported_dir,
             );
     fclose(f);
 
-    snprintf(smb_cmdline, sizeof(smb_cmdline), "%s -s %s",
-             CONFIG_SMBD_COMMAND, smb_conf);
+    smb_cmdline = g_strdup_printf("%s -l %s -s %s",
+             CONFIG_SMBD_COMMAND, s->smb_dir, smb_conf);
+    g_free(smb_conf);
 
     if (slirp_add_exec(s->slirp, 0, smb_cmdline, &vserver_addr, 139) < 0) {
         slirp_smb_cleanup(s);
+        g_free(smb_cmdline);
         error_report("conflicting/invalid smbserver address");
         return -1;
     }
+    g_free(smb_cmdline);
     return 0;
 }
 
