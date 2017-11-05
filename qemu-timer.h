@@ -144,6 +144,8 @@ void qemu_put_timer(QEMUFile *f, QEMUTimer *ts);
 int64_t cpu_get_icount(void);
 int64_t cpu_get_clock(void);
 
+int32_t *cpu_get_clock_scale_ptr(void);
+
 /*******************************************/
 /* host CPU ticks (if available) */
 

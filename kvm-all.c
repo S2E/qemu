@@ -1219,22 +1219,6 @@ static int kvm_dev_restore_snapshot(void)
 
 #endif
 
-#ifdef KVM_CAP_CPU_CLOCK_SCALE
-int kvm_has_cpu_clock_scale(void)
-{
-    if (!kvm_enabled()) {
-        return 0;
-    }
-
-    return kvm_state->cpu_clock_scale;
-}
-#else
-int kvm_has_cpu_clock_scale(void)
-{
-    return 0;
-}
-#endif
-
 extern volatile bool g_main_loop_thread_inited;
 static void kvm_clone_process(CPUArchState *env)
 {
@@ -1374,7 +1358,21 @@ int kvm_init(void)
 #endif
 
 #ifdef KVM_CAP_CPU_CLOCK_SCALE
+    // Clock scaling allows KVM implementations to slow down the QEMU virtual
+    // clock by a given factor. When scaling is greater than one, the guest
+    // will experience a slower time (e.g., with scaling of 2, 1 second of guest
+    // time will correspond to 2s of wall time). This functionality is useful
+    // when KVM clients need to perform heavy processing and want to avoid
+    // being interrupted too frequently by timer interrupts in order to
+    // ensure some progress.
+    //
+    // The clock scale factor is a pointer to an integer. Setting it takes effect
+    // immediately. The next call to a time-related function from cpus.c will
+    // use the updated scaling.
     s->cpu_clock_scale = kvm_check_extension(s, KVM_CAP_CPU_CLOCK_SCALE);
+    if (s->cpu_clock_scale) {
+        kvm_vm_ioctl(s, KVM_SET_CLOCK_SCALE, cpu_get_clock_scale_ptr());
+    }
 #endif
 
     ret = kvm_arch_init(s);
