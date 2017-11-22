@@ -102,6 +102,11 @@ static TimersState timers_state = {
     .cpu_clock_prev_scaled = 0,
 };
 
+int32_t *cpu_get_clock_scale_ptr(void)
+{
+    return &timers_state.cpu_clock_scale_factor;
+}
+
 /* Return the virtual CPU time, based on the instruction counter.  */
 int64_t cpu_get_icount(void)
 {
@@ -143,33 +148,25 @@ int64_t cpu_get_ticks(void)
 int64_t cpu_get_clock(void)
 {
     if (!timers_state.cpu_ticks_enabled) {
-        if (timers_state.cpu_clock_scale_factor > 1) {
-            return timers_state.cpu_clock_prev_scaled;
-        } else {
-            return timers_state.cpu_clock_offset;
-        }
+        return timers_state.cpu_clock_offset;
     } else {
-        if (timers_state.cpu_clock_scale_factor > 1) {
-            /* Compute how much real time elapsed since last request */
-            int64_t cur_clock = get_clock() + timers_state.cpu_clock_offset;
-            int64_t increment = cur_clock - timers_state.cpu_clock_prev;
-            assert(increment > 0);
+        /* Compute how much real time elapsed since last request */
+        int64_t cur_clock = get_clock() + timers_state.cpu_clock_offset;
+        int64_t increment = cur_clock - timers_state.cpu_clock_prev;
+        assert(increment > 0);
 
-            /* Slow the clock down according to the scale */
-            int64_t result = timers_state.cpu_clock_prev_scaled + increment / timers_state.cpu_clock_scale_factor;
+        /* Slow the clock down according to the scale */
+        int64_t result = timers_state.cpu_clock_prev_scaled + increment / timers_state.cpu_clock_scale_factor;
 
-            /* Check that monotonicity is not violated */
-            assert(cur_clock >= 0 && cur_clock >= timers_state.cpu_clock_prev);
-            assert(result >= 0 && result >= timers_state.cpu_clock_prev_scaled);
+        /* Check that monotonicity is not violated */
+        assert(cur_clock >= 0 && cur_clock >= timers_state.cpu_clock_prev);
+        assert(result >= 0 && result >= timers_state.cpu_clock_prev_scaled);
 
-            /* Save the current time stamp */
-            timers_state.cpu_clock_prev_scaled = result;
-            timers_state.cpu_clock_prev = cur_clock;
+        /* Save the current time stamp */
+        timers_state.cpu_clock_prev_scaled = result;
+        timers_state.cpu_clock_prev = cur_clock;
 
-            return result;
-        } else {
-            return get_clock() + timers_state.cpu_clock_offset;
-        }
+        return result;
     }
 }
 
@@ -183,11 +180,9 @@ void cpu_enable_ticks(void)
         timers_state.cpu_clock_offset -= cur_clock;
         timers_state.cpu_ticks_enabled = 1;
 
-        if (timers_state.cpu_clock_scale_factor > 1) {
-            /* Fast-forward suspended clocks */
-            timers_state.cpu_clock_prev = cur_clock + timers_state.cpu_clock_offset;
-            timers_state.cpu_clock_prev_scaled = timers_state.cpu_clock_prev;
-        }
+        /* Fast-forward suspended clocks */
+        timers_state.cpu_clock_prev = cur_clock + timers_state.cpu_clock_offset;
+        timers_state.cpu_clock_prev_scaled = timers_state.cpu_clock_prev;
     }
 }
 
@@ -799,11 +794,6 @@ static void *qemu_kvm_cpu_thread_fn(void *arg)
             r = kvm_cpu_exec(env);
             if (r == EXCP_DEBUG) {
                 cpu_handle_guest_debug(env);
-            }
-
-            /* update the CPU clock scale factor */
-            if (kvm_has_cpu_clock_scale()) {
-                timers_state.cpu_clock_scale_factor = env->kvm_run->cpu_clock_scale_factor;
             }
         }
         qemu_kvm_wait_io_event(env);
