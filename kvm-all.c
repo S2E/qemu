@@ -1563,7 +1563,9 @@ int kvm_cpu_exec(CPUArchState *env)
 
         run_ret = kvm_vcpu_ioctl(env, KVM_RUN, 0);
 
-        if (!keep_io_thread_locked) {
+        // There is no IO thread anymore if the KVM engine just forked the process,
+        // so nothing to lock.
+        if (!keep_io_thread_locked && run->exit_reason != KVM_EXIT_CLONE_PROCESS) {
             qemu_mutex_lock_iothread();
         }
 
@@ -1637,6 +1639,7 @@ int kvm_cpu_exec(CPUArchState *env)
             break;
         case KVM_EXIT_CLONE_PROCESS:
             kvm_clone_process(env);
+            keep_io_thread_locked = 0;
             ret = 0;
             break;
         default:
