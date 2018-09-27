@@ -2694,7 +2694,12 @@ static BlockDriverState *bdrv_open_inherit(const char *filename,
     /* Open image file without format layer. This BlockBackend is only used for
      * probing, the block drivers will do their own bdrv_open_child() for the
      * same BDS, which is why we put the node name back into options. */
-    if ((flags & BDRV_O_PROTOCOL) == 0) {
+    if (drvname && !strcmp(drvname, "s2e") && filename) {
+        // XXX: this is a hack to disable format probing in case the user specifies
+        // the S2E image driver. S2E image files are read-only by design but QEMU
+        // tries to open them in read-write mode for probing, which leads to access denied.
+        qdict_put_str(options, "file", filename);
+    } else if ((flags & BDRV_O_PROTOCOL) == 0) {
         BlockDriverState *file_bs;
 
         file_bs = bdrv_open_child_bs(filename, options, "file", bs,
