@@ -22,6 +22,8 @@
  * THE SOFTWARE.
  */
 
+#include <png.h>
+
 #include "qemu/osdep.h"
 #include "ui/console.h"
 #include "hw/qdev-core.h"
@@ -298,6 +300,77 @@ void graphic_hw_invalidate(QemuConsole *con)
     }
 }
 
+static void png_save(const char *filename, struct DisplaySurface *ds,
+                    Error **errp)
+{
+    FILE *fp;
+    png_structp png_ptr;
+    png_infop info_ptr;
+    int width = pixman_image_get_width(ds->image);
+    int height = pixman_image_get_height(ds->image);
+    pixman_image_t *linebuf;
+
+    // Open file for writing (binary mode)
+    fp = fopen(filename, "wb");
+    if (fp == NULL) {
+        error_setg(errp, "png_save: could not open file %s for writing\n", filename);
+        goto err1;
+    }
+
+    // Initialize write structure
+    png_ptr = png_create_write_struct(PNG_LIBPNG_VER_STRING, NULL, NULL, NULL);
+    if (png_ptr == NULL) {
+        error_setg(errp, "png_save: could not allocate write structure\n");
+        goto err2;
+    }
+
+    // Initialize info structure
+    info_ptr = png_create_info_struct(png_ptr);
+    if (info_ptr == NULL) {
+        error_setg(errp, "png_save: could not allocate info struct\n");
+        goto err3;
+    }
+
+    // Setup Exception handling
+    if (setjmp(png_jmpbuf(png_ptr))) {
+        error_setg(errp, "png_save: error during png creation\n");
+        goto err4;
+    }
+
+    png_init_io(png_ptr, fp);
+
+    // Write header (8 bit colour depth)
+    png_set_IHDR(png_ptr, info_ptr, width, height,
+                 8, PNG_COLOR_TYPE_RGB, PNG_INTERLACE_NONE,
+                 PNG_COMPRESSION_TYPE_BASE, PNG_FILTER_TYPE_BASE);
+    png_write_info(png_ptr, info_ptr);
+
+    linebuf = qemu_pixman_linebuf_create(PIXMAN_BE_r8g8b8, width);
+
+    for (int y = 0; y < height; ++y) {
+        qemu_pixman_linebuf_fill(linebuf, ds->image, width, 0, y);
+        png_write_row(png_ptr, (png_bytep) pixman_image_get_data(linebuf));
+    }
+
+    // End write
+    png_write_end(png_ptr, NULL);
+
+
+err4:
+    qemu_pixman_image_unref(linebuf);
+    png_free_data(png_ptr, info_ptr, PNG_FREE_ALL, -1);
+
+err3:
+    png_destroy_write_struct(&png_ptr, (png_infopp) NULL);
+
+err2:
+    fclose(fp);
+
+err1:
+    return;
+}
+
+
 static void ppm_save(const char *filename, DisplaySurface *ds,
                      Error **errp)
 {
@@ -377,7 +450,11 @@ void qmp_screendump(const char *filename, bool has_device, const char *device,
         return;
     }
 
-    ppm_save(filename, surface, errp);
+    if (strstr(filename, ".png")) {
+        png_save(filename, surface, errp);
+    } else {
+        ppm_save(filename, surface, errp);
+    }
 }
 
 void graphic_hw_text_update(QemuConsole *con, console_ch_t *chardata)
