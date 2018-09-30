@@ -4655,6 +4655,8 @@ int main(int argc, char **argv, char **envp)
         exit(1);
     }
 
+    qemu_initialize_savevm_timer();
+
     if (periodic_screenshot) {
         s_screenshot_timer = timer_new(QEMU_CLOCK_HOST, 1, screenshot_timer_handler, NULL);
         timer_mod(s_screenshot_timer, qemu_clock_get_ms(QEMU_CLOCK_HOST) + 1000);
