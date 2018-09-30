@@ -234,6 +234,79 @@ static gboolean serial_watch_cb(GIOChannel *chan, GIOCondition cond,
     return FALSE;
 }
 
+/**
+ * This function scans the serial output for various commands
+ * to be executed by QEMU.
+ *
+ * @brief check_magic_commands
+ * @param c current transmitted character
+ */
+#define MAGIC_BUF_SIZE 20
+static char s_magic_buf[MAGIC_BUF_SIZE];
+extern int serial_commands_enabled;
+static void check_magic_commands(char c)
+{
+    static const char *MAGIC_START = "?!?MAGIC?!?";
+    static int state = 0;
+    static int cur_idx = 0;
+    static char command = ' ';
+
+    if (!serial_commands_enabled) {
+        return;
+    }
+
+    switch (state) {
+        case 0: {
+            if (c == MAGIC_START[cur_idx]) {
+                ++cur_idx;
+            } else {
+                cur_idx = 0;
+            }
+
+            if (MAGIC_START[cur_idx] == 0) {
+                /* Found the magic string, go to command parsing stage */
+                state = 1;
+            }
+        } break;
+
+        case 1: {
+            command = c;
+            state = 2;
+            cur_idx = 0;
+            memset(s_magic_buf, 0, MAGIC_BUF_SIZE);
+        } break;
+
+        /* Skip the space */
+        case 2: state = 3; break;
+
+        /* Read the parameter */
+        case 3: {
+            if (c == ' ') {
+                /* Done reading parameter */
+                state = 4;
+            } else {
+                s_magic_buf[cur_idx++] = c;
+                if (cur_idx >= MAGIC_BUF_SIZE) {
+                    state = 0;
+                    cur_idx = 0;
+                }
+            }
+        } break;
+    }
+
+    if (state == 4) {
+        cur_idx = 0;
+        state = 0;
+        if (command == 's') {
+            printf("Saving snapshot %s and exiting\n", s_magic_buf);
+            qemu_schedule_savevm(s_magic_buf, 1);
+        } else if (command == 'k') {
+            printf("Exiting QEMU\n");
+            exit(0);
+        }
+    }
+}
+
 static void serial_xmit(SerialState *s)
 {
     do {
@@ -274,6 +347,8 @@ static void serial_xmit(SerialState *s)
                     s->tsr_retry++;
                     return;
                 }
+            } else {
+                check_magic_commands(s->tsr);
             }
         }
         s->tsr_retry = 0;

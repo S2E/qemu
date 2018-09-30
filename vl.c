@@ -190,6 +190,7 @@ int icount_align_option;
 
 const char *periodic_screenshot = NULL;
 static QEMUTimer *s_screenshot_timer;
+int serial_commands_enabled = 0;
 
 /* The bytes in qemu_uuid are in the order specified by RFC4122, _not_ in the
  * little-endian "wire format" described in the SMBIOS 2.6 specification.
@@ -3575,6 +3576,9 @@ int main(int argc, char **argv, char **envp)
                 break;
             case QEMU_OPTION_periodic_screenshot:
                 periodic_screenshot = optarg;
+                break;
+            case QEMU_OPTION_serial_commands:
+                serial_commands_enabled = 1;
                 break;
             case QEMU_OPTION_full_screen:
                 dpy.has_full_screen = true;
