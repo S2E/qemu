@@ -3054,7 +3054,7 @@ int main(int argc, char **argv, char **envp)
         error_reportf_err(err, "cannot initialize crypto: ");
         exit(1);
     }
-    rtc_clock = QEMU_CLOCK_HOST;
+    rtc_clock = QEMU_CLOCK_VIRTUAL;
 
     QLIST_INIT (&vm_change_state_head);
     os_setup_early_signal_handling();
