@@ -950,6 +950,8 @@ struct kvm_ppc_resize_hpt {
 #define KVM_CAP_HYPERV_EVENTFD 154
 #define KVM_CAP_HYPERV_TLBFLUSH 155
 
+#define KVM_CAP_FORCE_EXIT 255
+
 #ifdef KVM_CAP_IRQ_ROUTING
 
 struct kvm_irq_routing_irqchip {
@@ -1391,6 +1393,8 @@ struct kvm_enc_region {
 /* Available with KVM_CAP_HYPERV_EVENTFD */
 #define KVM_HYPERV_EVENTFD        _IOW(KVMIO,  0xbd, struct kvm_hyperv_eventfd)
 
+
+#define KVM_FORCE_EXIT            _IO(KVMIO,  0xf4)
 
 /* Secure Encrypted Virtualization command */
 enum sev_cmd_id {

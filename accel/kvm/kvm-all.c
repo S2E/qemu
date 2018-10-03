@@ -129,6 +129,10 @@ bool kvm_ioeventfd_any_length_allowed;
 bool kvm_msi_use_devid;
 static bool kvm_immediate_exit;
 
+#ifdef KVM_CAP_FORCE_EXIT
+static bool kvm_force_exit;
+#endif
+
 static const KVMCapabilityInfo kvm_required_capabilites[] = {
     KVM_CAP_INFO(USER_MEMORY),
     KVM_CAP_INFO(DESTROY_MEMORY_REGION_WORKS),
@@ -1658,6 +1662,10 @@ static int kvm_init(MachineState *ms)
     kvm_ioeventfd_any_length_allowed =
         (kvm_check_extension(s, KVM_CAP_IOEVENTFD_ANY_LENGTH) > 0);
 
+#ifdef KVM_CAP_FORCE_EXIT
+    kvm_force_exit = kvm_check_extension(s, KVM_CAP_FORCE_EXIT);
+#endif
+
     kvm_state = s;
 
     /*
@@ -1841,6 +1849,17 @@ static __thread bool have_sigbus_pending;
 static void kvm_cpu_kick(CPUState *cpu)
 {
     atomic_set(&cpu->kvm_run->immediate_exit, 1);
+
+
+    /**
+     * For user-space KVM implementations that cannot exit immediately
+     * when potential interrupts (signals) are pending.
+     */
+#ifdef KVM_CAP_FORCE_EXIT
+    if (kvm_force_exit) {
+        kvm_vm_ioctl(kvm_state, KVM_FORCE_EXIT, NULL);
+    }
+#endif
 }
 
 static void kvm_cpu_kick_self(void)
