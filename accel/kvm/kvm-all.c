@@ -141,6 +141,10 @@ static bool kvm_fixed_memory;
 static bool kvm_has_mem_rw_flag;
 #endif
 
+#ifdef KVM_CAP_DISK_RW
+static bool kvm_has_disk_rw_flag;
+#endif
+
 static const KVMCapabilityInfo kvm_required_capabilites[] = {
     KVM_CAP_INFO(USER_MEMORY),
     KVM_CAP_INFO(DESTROY_MEMORY_REGION_WORKS),
@@ -1538,6 +1542,36 @@ int kvm_mem_rw(void *dest, const void *source, uint64_t size, int is_write)
 }
 #endif
 
+#ifdef KVM_CAP_DISK_RW
+int kvm_has_disk_rw(void)
+{
+    return kvm_has_disk_rw_flag;
+}
+int kvm_disk_rw(void *buffer, uint64_t sector, int count, int is_write)
+{
+    int ret;
+    struct kvm_disk_rw rw;
+    rw.host_address = (uintptr_t) buffer;
+    rw.sector = sector;
+    rw.count = count;
+    rw.is_write = is_write;
+    ret = kvm_vm_ioctl(kvm_state, KVM_DISK_RW, &rw);
+    if (ret < 0) {
+        return ret;
+    }
+    return rw.count;
+}
+#else
+int kvm_has_disk_rw(void)
+{
+    return 0;
+}
+int kvm_disk_rw(void *buffer, uint64_t sector, int count, int is_write)
+{
+    return -1;
+}
+#endif
+
 
 static int kvm_init(MachineState *ms)
 {
@@ -1728,6 +1762,10 @@ static int kvm_init(MachineState *ms)
 
 #ifdef KVM_CAP_MEM_RW
     kvm_has_mem_rw_flag = kvm_check_extension(s, KVM_CAP_MEM_RW);
+#endif
+
+#ifdef KVM_CAP_DISK_RW
+    kvm_has_disk_rw_flag = kvm_check_extension(s, KVM_CAP_DISK_RW);
 #endif
 
     kvm_state = s;

@@ -218,6 +218,8 @@ int kvm_has_intx_set_mask(void);
 int kvm_register_fixed_memory_region(const char *name, uintptr_t start, uint64_t size, int shared_concrete);
 int kvm_mem_rw(void *dest, const void *source, uint64_t size, int is_write);
 int kvm_has_mem_rw(void);
+int kvm_disk_rw(void *buffer, uint64_t sector, int count, int is_write);
+int kvm_has_disk_rw(void);
 
 int kvm_init_vcpu(CPUState *cpu);
 int kvm_cpu_exec(CPUState *cpu);

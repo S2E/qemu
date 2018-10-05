@@ -961,6 +961,9 @@ struct kvm_ppc_resize_hpt {
 /* Indicates presence of fixed memory region support */
 #define KVM_CAP_MEM_FIXED_REGION 256
 
+/* Indicates presence of in-kvm disk support */
+#define KVM_CAP_DISK_RW 257
+
 #define KVM_CAP_MEM_RW 1021
 
 /****************************************/
@@ -1430,6 +1433,17 @@ struct kvm_mem_rw {
 };
 #define KVM_MEM_RW		  _IOW(KVMIO,  0xf3, struct kvm_mem_rw)
 
+/* Available with KVM_CAP_DISK_RW */
+struct kvm_disk_rw {
+    /* Address of the buffer in host memory */
+    __u64 host_address;
+    /* 512-byte sectors */
+    __u64 sector;
+    /* input: sectors to read/write, output: sectors read/written */
+    __u32 count;
+    __u8 is_write;
+};
+#define KVM_DISK_RW   _IOWR(KVMIO,  0xf6, struct kvm_disk_rw)
 
 /* Secure Encrypted Virtualization command */
 enum sev_cmd_id {
