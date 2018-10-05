@@ -595,7 +595,14 @@ static int vapic_map_rom_writable(VAPICROMState *s)
         return -1;
     }
     ram = memory_region_get_ram_ptr(section.mr);
-    rom_size = ram[rom_paddr + 2] * ROM_BLOCK_SIZE;
+
+    uint8_t ram_buf;
+    if (kvm_has_mem_rw() && !kvm_mem_rw(&ram_buf, &ram[rom_paddr + 2], 1, 0)) {
+        rom_size = ram_buf * ROM_BLOCK_SIZE;
+    } else {
+        rom_size = ram[rom_paddr + 2] * ROM_BLOCK_SIZE;
+    }
+
     if (rom_size == 0) {
         return -1;
     }

@@ -3256,7 +3256,9 @@ static MemTxResult flatview_write_continue(FlatView *fv, hwaddr addr,
         } else {
             /* RAM case */
             ptr = qemu_ram_ptr_length(mr->ram_block, addr1, &l, false);
-            memcpy(ptr, buf, l);
+            if (!kvm_enabled() ||  kvm_mem_rw(ptr, buf, l, 1) < 0) {
+                memcpy(ptr, buf, l);
+            }
             invalidate_and_set_dirty(mr, addr1, l);
         }
 
@@ -3318,7 +3320,9 @@ MemTxResult flatview_read_continue(FlatView *fv, hwaddr addr,
         } else {
             /* RAM case */
             ptr = qemu_ram_ptr_length(mr->ram_block, addr1, &l, false);
-            memcpy(buf, ptr, l);
+            if (!kvm_enabled() ||  kvm_mem_rw(buf, ptr, l, 0) < 0) {
+                memcpy(buf, ptr, l);
+            }
         }
 
         if (release_lock) {
@@ -3432,7 +3436,10 @@ static inline void cpu_physical_memory_write_rom_internal(AddressSpace *as,
             ptr = qemu_map_ram_ptr(mr->ram_block, addr1);
             switch (type) {
             case WRITE_DATA:
-                memcpy(ptr, buf, l);
+                if (!kvm_enabled() ||  kvm_mem_rw(ptr, buf, l, 1) < 0) {
+                    memcpy(ptr, buf, l);
+                }
+
                 invalidate_and_set_dirty(mr, addr1, l);
                 break;
             case FLUSH_CACHE:
@@ -3479,6 +3486,31 @@ typedef struct {
 } BounceBuffer;
 
 static BounceBuffer bounce;
+
+/**
+ * Block devices may split big requests in chunks of 4K,
+ * each of them requiring one buffer.
+ */
+static unsigned s_max_bounce_buffers = 0;
+BounceBuffer *s_bounce_buffers = NULL;
+
+static BounceBuffer* bounce_buffer_alloc(void)
+{
+    int i;
+    for (i = 0; i < s_max_bounce_buffers; ++i) {
+        if (!s_bounce_buffers[i].buffer) {
+            return &s_bounce_buffers[i];
+        }
+    }
+
+    //Did not find any bounce buffer, allocate some more.
+    unsigned old_count = s_max_bounce_buffers;
+    s_max_bounce_buffers += 32;
+    s_bounce_buffers = g_renew(BounceBuffer, s_bounce_buffers, s_max_bounce_buffers);
+    memset(s_bounce_buffers + old_count, 0, s_max_bounce_buffers - old_count);
+    return &s_bounce_buffers[old_count];
+}
+
 
 typedef struct MapClient {
     QEMUBH *bh;
@@ -3637,47 +3669,61 @@ void *address_space_map(AddressSpace *as,
     MemoryRegion *mr;
     void *ptr;
     FlatView *fv;
+    bool use_bounce_buffers = kvm_has_mem_rw();
 
     if (len == 0) {
         return NULL;
     }
 
-    l = len;
-    rcu_read_lock();
-    fv = address_space_to_flatview(as);
-    mr = flatview_translate(fv, addr, &xlat, &l, is_write, attrs);
+    if (use_bounce_buffers) {
+        BounceBuffer *buffer = bounce_buffer_alloc();
 
-    if (!memory_access_is_direct(mr, is_write)) {
-        if (atomic_xchg(&bounce.in_use, true)) {
-            rcu_read_unlock();
-            return NULL;
+        buffer->buffer = qemu_memalign(TARGET_PAGE_SIZE, *plen);
+        buffer->addr = addr;
+        buffer->len = *plen;
+        if (!is_write) {
+            cpu_physical_memory_rw(addr, buffer->buffer, *plen, 0);
         }
-        /* Avoid unbounded allocations */
-        l = MIN(l, TARGET_PAGE_SIZE);
-        bounce.buffer = qemu_memalign(TARGET_PAGE_SIZE, l);
-        bounce.addr = addr;
-        bounce.len = l;
+
+        return buffer->buffer;
+    } else {
+        l = len;
+        rcu_read_lock();
+        fv = address_space_to_flatview(as);
+        mr = flatview_translate(fv, addr, &xlat, &l, is_write, attrs);
+
+        if (!memory_access_is_direct(mr, is_write)) {
+            if (atomic_xchg(&bounce.in_use, true)) {
+                rcu_read_unlock();
+                return NULL;
+            }
+            /* Avoid unbounded allocations */
+            l = MIN(l, TARGET_PAGE_SIZE);
+            bounce.buffer = qemu_memalign(TARGET_PAGE_SIZE, l);
+            bounce.addr = addr;
+            bounce.len = l;
+
+            memory_region_ref(mr);
+            bounce.mr = mr;
+            if (!is_write) {
+                flatview_read(fv, addr, MEMTXATTRS_UNSPECIFIED,
+                                   bounce.buffer, l);
+            }
+
+            rcu_read_unlock();
+            *plen = l;
+            return bounce.buffer;
+        }
+
 
         memory_region_ref(mr);
-        bounce.mr = mr;
-        if (!is_write) {
-            flatview_read(fv, addr, MEMTXATTRS_UNSPECIFIED,
-                               bounce.buffer, l);
-        }
-
+        *plen = flatview_extend_translation(fv, addr, len, mr, xlat,
+                                            l, is_write, attrs);
+        ptr = qemu_ram_ptr_length(mr->ram_block, xlat, plen, true);
         rcu_read_unlock();
-        *plen = l;
-        return bounce.buffer;
+
+        return ptr;
     }
-
-
-    memory_region_ref(mr);
-    *plen = flatview_extend_translation(fv, addr, len, mr, xlat,
-                                        l, is_write, attrs);
-    ptr = qemu_ram_ptr_length(mr->ram_block, xlat, plen, true);
-    rcu_read_unlock();
-
-    return ptr;
 }
 
 /* Unmaps a memory region previously mapped by address_space_map().
@@ -3687,6 +3733,25 @@ void *address_space_map(AddressSpace *as,
 void address_space_unmap(AddressSpace *as, void *buffer, hwaddr len,
                          int is_write, hwaddr access_len)
 {
+    bool use_bounce_buffers = kvm_has_mem_rw();
+    if (use_bounce_buffers) {
+        //Look for bounce buffers
+        for (int i = 0; i < s_max_bounce_buffers; ++i) {
+            if (s_bounce_buffers[i].buffer == buffer) {
+                if (is_write) {
+                    address_space_write(as, s_bounce_buffers[i].addr, MEMTXATTRS_UNSPECIFIED,
+                                        s_bounce_buffers[i].buffer, access_len);
+                }
+                qemu_vfree(s_bounce_buffers[i].buffer);
+                s_bounce_buffers[i].buffer = NULL;
+                memory_region_unref(bounce.mr);
+                atomic_mb_set(&bounce.in_use, false);
+                cpu_notify_map_clients();
+                return;
+            }
+        }
+    }
+
     if (buffer != bounce.buffer) {
         MemoryRegion *mr;
         ram_addr_t addr1;

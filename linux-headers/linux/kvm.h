@@ -961,6 +961,8 @@ struct kvm_ppc_resize_hpt {
 /* Indicates presence of fixed memory region support */
 #define KVM_CAP_MEM_FIXED_REGION 256
 
+#define KVM_CAP_MEM_RW 1021
+
 /****************************************/
 
 #ifdef KVM_CAP_IRQ_ROUTING
@@ -1417,6 +1419,17 @@ struct kvm_fixed_region {
     __u32 flags;
 };
 #define KVM_MEM_REGISTER_FIXED_REGION   _IOW(KVMIO,  0xf5, struct kvm_fixed_region)
+
+/* Available with KVM_CAP_MEM_RW */
+struct kvm_mem_rw {
+    /* source and dest are always host pointers */
+    __u64 source;
+    __u64 dest;
+    __u64 is_write;
+    __u64 length;
+};
+#define KVM_MEM_RW		  _IOW(KVMIO,  0xf3, struct kvm_mem_rw)
+
 
 /* Secure Encrypted Virtualization command */
 enum sev_cmd_id {

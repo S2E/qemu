@@ -137,6 +137,10 @@ static bool kvm_force_exit;
 static bool kvm_fixed_memory;
 #endif
 
+#ifdef KVM_CAP_MEM_RW
+static bool kvm_has_mem_rw_flag;
+#endif
+
 static const KVMCapabilityInfo kvm_required_capabilites[] = {
     KVM_CAP_INFO(USER_MEMORY),
     KVM_CAP_INFO(DESTROY_MEMORY_REGION_WORKS),
@@ -1509,6 +1513,32 @@ int kvm_register_fixed_memory_region(const char *name, uintptr_t start, uint64_t
 }
 #endif
 
+#ifdef KVM_CAP_MEM_RW
+int kvm_has_mem_rw(void)
+{
+    return kvm_has_mem_rw_flag;
+}
+int kvm_mem_rw(void *dest, const void *source, uint64_t size, int is_write)
+{
+    struct kvm_mem_rw rw;
+    rw.dest = (uintptr_t) dest;
+    rw.source = (uintptr_t) source;
+    rw.length = size;
+    rw.is_write = is_write;
+    return kvm_vm_ioctl(kvm_state, KVM_MEM_RW, &rw);
+}
+#else
+int kvm_has_mem_rw(void)
+{
+    return 0;
+}
+int kvm_mem_rw(void *dest, const void *source, uint64_t size, int is_write)
+{
+    return -1;
+}
+#endif
+
+
 static int kvm_init(MachineState *ms)
 {
     MachineClass *mc = MACHINE_GET_CLASS(ms);
@@ -1694,6 +1724,10 @@ static int kvm_init(MachineState *ms)
 
 #ifdef KVM_CAP_MEM_FIXED_REGION
     kvm_fixed_memory = kvm_check_extension(s, KVM_CAP_MEM_FIXED_REGION);
+#endif
+
+#ifdef KVM_CAP_MEM_RW
+    kvm_has_mem_rw_flag = kvm_check_extension(s, KVM_CAP_MEM_RW);
 #endif
 
     kvm_state = s;

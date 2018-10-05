@@ -53,6 +53,7 @@
 #include "migration/colo.h"
 #include "block.h"
 #include "sysemu/sysemu.h"
+#include "sysemu/kvm.h"
 #include "qemu/uuid.h"
 #include "savevm.h"
 #include "qemu/iov.h"
@@ -3855,12 +3856,30 @@ static int ram_load(QEMUFile *f, void *opaque, int version_id)
 
         case RAM_SAVE_FLAG_ZERO:
             ch = qemu_get_byte(f);
-            ram_handle_compressed(host, ch, TARGET_PAGE_SIZE);
+            if (kvm_enabled() && kvm_has_mem_rw()) {
+                uint8_t buffer[TARGET_PAGE_SIZE];
+                ram_handle_compressed(buffer, ch, TARGET_PAGE_SIZE);
+                if (kvm_mem_rw(host, buffer, sizeof(buffer), 1) < 0) {
+                    ret = -EINVAL;
+                    break;
+                }
+            } else {
+                ram_handle_compressed(host, ch, TARGET_PAGE_SIZE);
+            }
             break;
 
-        case RAM_SAVE_FLAG_PAGE:
-            qemu_get_buffer(f, host, TARGET_PAGE_SIZE);
-            break;
+        case RAM_SAVE_FLAG_PAGE: {
+            if (kvm_enabled() && kvm_has_mem_rw()) {
+                uint8_t buffer[TARGET_PAGE_SIZE];
+                qemu_get_buffer(f, buffer, sizeof(buffer));
+                if (kvm_mem_rw(host, buffer, sizeof(buffer), 1) < 0) {
+                    ret = -EINVAL;
+                    break;
+                }
+            } else {
+                qemu_get_buffer(f, host, TARGET_PAGE_SIZE);
+            }
+        } break;
 
         case RAM_SAVE_FLAG_COMPRESS_PAGE:
             len = qemu_get_be32(f);
@@ -3869,7 +3888,17 @@ static int ram_load(QEMUFile *f, void *opaque, int version_id)
                 ret = -EINVAL;
                 break;
             }
-            decompress_data_with_multi_threads(f, host, len);
+
+            if (kvm_enabled() && kvm_has_mem_rw()) {
+                uint8_t buffer[TARGET_PAGE_SIZE];
+                decompress_data_with_multi_threads(f, buffer, len);
+                if (kvm_mem_rw(host, buffer, len, 1) < 0) {
+                    ret = -EINVAL;
+                    break;
+                }
+            } else {
+                decompress_data_with_multi_threads(f, host, len);
+            }
             break;
 
         case RAM_SAVE_FLAG_XBZRLE:
