@@ -55,6 +55,7 @@
 #include "exec/address-spaces.h"
 #include "hw/boards.h"
 #include "qemu/cutils.h"
+#include "sysemu/kvm.h"
 
 #include <zlib.h>
 
@@ -898,6 +899,15 @@ static void *rom_set_mr(Rom *rom, Object *owner, const char *name, bool ro)
 
     data = memory_region_get_ram_ptr(rom->mr);
     memcpy(data, rom->data, rom->datasize);
+
+
+    uint64_t sz = memory_region_size(rom->mr);
+    if (sz & 0xfff) {
+        sz += 0x1000;
+        sz &= ~0xfff;
+    }
+
+    kvm_register_fixed_memory_region(name, (uintptr_t) data, sz, 1);
 
     return data;
 }

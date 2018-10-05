@@ -43,6 +43,7 @@
 #include "qapi/error.h"
 #include "qapi/qapi-commands-misc.h"
 #include "qemu/cutils.h"
+#include "sysemu/kvm.h"
 
 //#define DEBUG_PCI
 #ifdef DEBUG_PCI
@@ -2251,6 +2252,9 @@ static void pci_add_option_rom(PCIDevice *pdev, bool is_default_rom,
     pdev->has_rom = true;
     memory_region_init_rom(&pdev->rom, OBJECT(pdev), name, size, &error_fatal);
     ptr = memory_region_get_ram_ptr(&pdev->rom);
+
+    kvm_register_fixed_memory_region(name, (uint64_t) ptr, size, 1);
+
     load_image(path, ptr);
     g_free(path);
 

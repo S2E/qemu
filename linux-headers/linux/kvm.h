@@ -950,7 +950,18 @@ struct kvm_ppc_resize_hpt {
 #define KVM_CAP_HYPERV_EVENTFD 154
 #define KVM_CAP_HYPERV_TLBFLUSH 155
 
+/****************************************/
+/**
+ * Custom capabilities for symbolic execution support
+ */
+
+/* This capability forces CPU exit */
 #define KVM_CAP_FORCE_EXIT 255
+
+/* Indicates presence of fixed memory region support */
+#define KVM_CAP_MEM_FIXED_REGION 256
+
+/****************************************/
 
 #ifdef KVM_CAP_IRQ_ROUTING
 
@@ -1394,7 +1405,18 @@ struct kvm_enc_region {
 #define KVM_HYPERV_EVENTFD        _IOW(KVMIO,  0xbd, struct kvm_hyperv_eventfd)
 
 
+/* Available with KVM_CAP_FORCE_EXIT */
 #define KVM_FORCE_EXIT            _IO(KVMIO,  0xf4)
+
+/* Available with KVM_CAP_MEM_FIXED_REGION */
+struct kvm_fixed_region {
+    #define KVM_MEM_SHARED_CONCRETE 1
+    const char *name;
+    __u64 host_address;
+    __u64 size;
+    __u32 flags;
+};
+#define KVM_MEM_REGISTER_FIXED_REGION   _IOW(KVMIO,  0xf5, struct kvm_fixed_region)
 
 /* Secure Encrypted Virtualization command */
 enum sev_cmd_id {

@@ -133,6 +133,10 @@ static bool kvm_immediate_exit;
 static bool kvm_force_exit;
 #endif
 
+#ifdef KVM_CAP_MEM_FIXED_REGION
+static bool kvm_fixed_memory;
+#endif
+
 static const KVMCapabilityInfo kvm_required_capabilites[] = {
     KVM_CAP_INFO(USER_MEMORY),
     KVM_CAP_INFO(DESTROY_MEMORY_REGION_WORKS),
@@ -1483,6 +1487,28 @@ bool kvm_vcpu_id_is_valid(int vcpu_id)
     return vcpu_id >= 0 && vcpu_id < kvm_max_vcpu_id(s);
 }
 
+#ifdef KVM_CAP_MEM_FIXED_REGION
+int kvm_register_fixed_memory_region(const char *name, uintptr_t start, uint64_t size, int shared_concrete)
+{
+    struct kvm_fixed_region reg;
+
+    if (!kvm_fixed_memory) {
+        return -1;
+    }
+
+    reg.name = name;
+    reg.host_address = start;
+    reg.size = size;
+    reg.flags = shared_concrete ? KVM_MEM_SHARED_CONCRETE : 0;
+    return kvm_vm_ioctl(kvm_state, KVM_MEM_REGISTER_FIXED_REGION, &reg);
+}
+#else
+int kvm_register_fixed_memory_region(const char *name, uintptr_t start, uint64_t size, int shared_concrete)
+{
+    return -1;
+}
+#endif
+
 static int kvm_init(MachineState *ms)
 {
     MachineClass *mc = MACHINE_GET_CLASS(ms);
@@ -1664,6 +1690,10 @@ static int kvm_init(MachineState *ms)
 
 #ifdef KVM_CAP_FORCE_EXIT
     kvm_force_exit = kvm_check_extension(s, KVM_CAP_FORCE_EXIT);
+#endif
+
+#ifdef KVM_CAP_MEM_FIXED_REGION
+    kvm_fixed_memory = kvm_check_extension(s, KVM_CAP_MEM_FIXED_REGION);
 #endif
 
     kvm_state = s;

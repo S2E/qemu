@@ -215,6 +215,8 @@ int kvm_has_many_ioeventfds(void);
 int kvm_has_gsi_routing(void);
 int kvm_has_intx_set_mask(void);
 
+int kvm_register_fixed_memory_region(const char *name, uintptr_t start, uint64_t size, int shared_concrete);
+
 int kvm_init_vcpu(CPUState *cpu);
 int kvm_cpu_exec(CPUState *cpu);
 int kvm_destroy_vcpu(CPUState *cpu);

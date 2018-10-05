@@ -1371,6 +1371,9 @@ void pc_memory_init(PCMachineState *pcms,
         exit(EXIT_FAILURE);
     }
 
+    kvm_register_fixed_memory_region("pc.ram", (uintptr_t)memory_region_get_ram_ptr(ram),
+                                     pcms->below_4g_mem_size + pcms->above_4g_mem_size, 0);
+
     /* always allocate the device memory information */
     machine->device_memory = g_malloc0(sizeof(*machine->device_memory));
 
@@ -1422,6 +1425,10 @@ void pc_memory_init(PCMachineState *pcms,
     if (pcmc->pci_enabled) {
         memory_region_set_readonly(option_rom_mr, true);
     }
+
+    kvm_register_fixed_memory_region("pc.rom", (uintptr_t) memory_region_get_ram_ptr(option_rom_mr),
+                                     PC_ROM_SIZE, 1);
+
     memory_region_add_subregion_overlap(rom_memory,
                                         PC_ROM_MIN_VGA,
                                         option_rom_mr,
