@@ -29,6 +29,7 @@
 #define QEMU_VM_COMMAND              0x08
 #define QEMU_VM_SECTION_FOOTER       0x7e
 
+int qemu_savevm_state(QEMUFile *f, Error **errp);
 bool qemu_savevm_state_blocked(Error **errp);
 void qemu_savevm_state_setup(QEMUFile *f);
 int qemu_savevm_state_resume_prepare(MigrationState *s);
