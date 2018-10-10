@@ -798,6 +798,34 @@ void vmstate_unregister(DeviceState *dev, const VMStateDescription *vmsd,
     }
 }
 
+static const char *s_blacklist[] = {"cpu", "block", "ram", NULL};
+
+static inline int is_dev_blacklisted(SaveStateEntry *se)
+{
+
+    const char **it = &s_blacklist[0];
+    while (*it) {
+        if (!strcmp(se->idstr, *it)) {
+            return 1;
+        }
+        ++it;
+    }
+    return 0;
+}
+
+void vmstate_unregister_blacklisted_devices(void)
+{
+    SaveStateEntry *se, *new_se;
+
+    QTAILQ_FOREACH_SAFE(se, &savevm_state.handlers, entry, new_se) {
+        if (is_dev_blacklisted(se)) {
+            QTAILQ_REMOVE(&savevm_state.handlers, se, entry);
+            g_free(se->compat);
+            g_free(se);
+        }
+    }
+}
+
 static int vmstate_load(QEMUFile *f, SaveStateEntry *se)
 {
     trace_vmstate_load(se->idstr, se->vmsd ? se->vmsd->name : "(old)");

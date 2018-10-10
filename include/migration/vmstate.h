@@ -1068,6 +1068,8 @@ static inline int vmstate_register(DeviceState *dev, int instance_id,
 void vmstate_unregister(DeviceState *dev, const VMStateDescription *vmsd,
                         void *opaque);
 
+void vmstate_unregister_blacklisted_devices(void);
+
 struct MemoryRegion;
 void vmstate_register_ram(struct MemoryRegion *memory, DeviceState *dev);
 void vmstate_unregister_ram(struct MemoryRegion *memory, DeviceState *dev);
