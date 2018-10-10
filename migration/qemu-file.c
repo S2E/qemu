@@ -202,6 +202,15 @@ void qemu_fflush(QEMUFile *f)
     f->iovcnt = 0;
 }
 
+void *qemu_file_get_internal_storage(QEMUFile *f, size_t *size)
+{
+    if (f->ops->get_internal_storage) {
+        return f->ops->get_internal_storage(f->opaque, size);
+    }
+
+    return NULL;
+}
+
 void ram_control_before_iterate(QEMUFile *f, uint64_t flags)
 {
     int ret = 0;

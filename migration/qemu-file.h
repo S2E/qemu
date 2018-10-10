@@ -99,6 +99,13 @@ typedef QEMUFile *(QEMURetPathFunc)(void *opaque);
  */
 typedef int (QEMUFileShutdownFunc)(void *opaque, bool rd, bool wr);
 
+/*
+ * Gets the internal storage buffer of the file object.
+ * Returns NULL if the command is not supported or there is
+ * no storage.
+ */
+typedef void* (QEMUFileGetStorageFunc)(void *opaque, size_t *size);
+
 typedef struct QEMUFileOps {
     QEMUFileGetBufferFunc *get_buffer;
     QEMUFileCloseFunc *close;
@@ -106,6 +113,7 @@ typedef struct QEMUFileOps {
     QEMUFileWritevBufferFunc *writev_buffer;
     QEMURetPathFunc *get_return_path;
     QEMUFileShutdownFunc *shut_down;
+    QEMUFileGetStorageFunc *get_internal_storage;
 } QEMUFileOps;
 
 typedef struct QEMUFileHooks {
@@ -155,6 +163,8 @@ int qemu_file_shutdown(QEMUFile *f);
 QEMUFile *qemu_file_get_return_path(QEMUFile *f);
 void qemu_fflush(QEMUFile *f);
 void qemu_file_set_blocking(QEMUFile *f, bool block);
+
+void *qemu_file_get_internal_storage(QEMUFile *f, size_t *size);
 
 size_t qemu_get_counted_string(QEMUFile *f, char buf[256]);
 
