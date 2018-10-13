@@ -885,6 +885,8 @@ int64_t cpu_get_clock(void);
 int64_t cpu_icount_to_ns(int64_t icount);
 void    cpu_update_icount(CPUState *cpu);
 
+int32_t *cpu_get_clock_scale_ptr(void);
+
 /*******************************************/
 /* host CPU ticks (if available) */
 

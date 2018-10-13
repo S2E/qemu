@@ -151,6 +151,10 @@ static bool kvm_has_disk_rw_flag;
 static bool kvm_dev_snapshot;
 #endif
 
+#ifdef KVM_CAP_CPU_CLOCK_SCALE
+static bool kvm_has_clock_scale;
+#endif
+
 static const KVMCapabilityInfo kvm_required_capabilites[] = {
     KVM_CAP_INFO(USER_MEMORY),
     KVM_CAP_INFO(DESTROY_MEMORY_REGION_WORKS),
@@ -1861,6 +1865,24 @@ static int kvm_init(MachineState *ms)
 
 #ifdef KVM_CAP_DEV_SNAPSHOT
     kvm_dev_snapshot = kvm_check_extension(s, KVM_CAP_DEV_SNAPSHOT);
+#endif
+
+#ifdef KVM_CAP_CPU_CLOCK_SCALE
+    // Clock scaling allows KVM implementations to slow down the QEMU virtual
+    // clock by a given factor. When scaling is greater than one, the guest
+    // will experience a slower time (e.g., with scaling of 2, 1 second of guest
+    // time will correspond to 2s of wall time). This functionality is useful
+    // when KVM clients need to perform heavy processing and want to avoid
+    // being interrupted too frequently by timer interrupts in order to
+    // ensure some progress.
+    //
+    // The clock scale factor is a pointer to an integer. Setting it takes effect
+    // immediately. The next call to a time-related function from cpus.c will
+    // use the updated scaling.
+    kvm_has_clock_scale = kvm_check_extension(s, KVM_CAP_CPU_CLOCK_SCALE);
+    if (kvm_has_clock_scale) {
+        kvm_vm_ioctl(s, KVM_SET_CLOCK_SCALE, cpu_get_clock_scale_ptr());
+    }
 #endif
 
     kvm_state = s;

@@ -972,7 +972,11 @@ struct kvm_ppc_resize_hpt {
 /* Indicates presence of device snapshots */
 #define KVM_CAP_DEV_SNAPSHOT 258
 
+/* Indicates presence of notifications of DMA read/writes */
 #define KVM_CAP_MEM_RW 1021
+
+/* This capability allows a clock to be slowed down via a clock scaling factor */
+#define KVM_CAP_CPU_CLOCK_SCALE 1022
 
 /****************************************/
 
@@ -1463,6 +1467,10 @@ struct kvm_dev_snapshot {
     __u8 is_write;
 };
 #define KVM_DEV_SNAPSHOT   _IOWR(KVMIO,  0xf7, struct kvm_dev_snapshot)
+
+/* Available with KVM_CAP_CPU_CLOCK_SCALE */
+#define KVM_SET_CLOCK_SCALE _IOWR(KVMIO, 0xf8, unsigned*)
+
 
 /* Secure Encrypted Virtualization command */
 enum sev_cmd_id {

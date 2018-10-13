@@ -139,6 +139,11 @@ typedef struct TimersState {
     int32_t cpu_ticks_enabled;
     int64_t dummy;
 
+    /* slow down vm clock by a factor x */
+    int32_t cpu_clock_scale_factor;
+    int64_t cpu_clock_prev;
+    int64_t cpu_clock_prev_scaled;
+
     /* Compensate for varying guest execution speed.  */
     int64_t qemu_icount_bias;
     /* Only written by TCG thread */
@@ -150,7 +155,15 @@ typedef struct TimersState {
     QEMUTimer *icount_warp_timer;
 } TimersState;
 
-static TimersState timers_state;
+static TimersState timers_state = {
+    .cpu_clock_scale_factor = 1,
+};
+
+int32_t *cpu_get_clock_scale_ptr(void)
+{
+    return &timers_state.cpu_clock_scale_factor;
+}
+
 bool mttcg_enabled;
 
 /*
@@ -330,14 +343,27 @@ int64_t cpu_get_ticks(void)
 
 static int64_t cpu_get_clock_locked(void)
 {
-    int64_t time;
+    if (!timers_state.cpu_ticks_enabled) {
+        return timers_state.cpu_clock_offset;
+    } else {
+        /* Compute how much real time elapsed since last request */
+        int64_t cur_clock = get_clock() + timers_state.cpu_clock_offset;
+        int64_t increment = cur_clock - timers_state.cpu_clock_prev;
+        assert(increment > 0);
 
-    time = timers_state.cpu_clock_offset;
-    if (timers_state.cpu_ticks_enabled) {
-        time += get_clock();
+        /* Slow the clock down according to the scale */
+        int64_t result = timers_state.cpu_clock_prev_scaled + increment / timers_state.cpu_clock_scale_factor;
+
+        /* Check that monotonicity is not violated */
+        assert(cur_clock >= 0 && cur_clock >= timers_state.cpu_clock_prev);
+        assert(result >= 0 && result >= timers_state.cpu_clock_prev_scaled);
+
+        /* Save the current time stamp */
+        timers_state.cpu_clock_prev_scaled = result;
+        timers_state.cpu_clock_prev = cur_clock;
+
+        return result;
     }
-
-    return time;
 }
 
 /* Return the monotonic time elapsed in VM, i.e.,
@@ -364,9 +390,15 @@ void cpu_enable_ticks(void)
     /* Here, the really thing protected by seqlock is cpu_clock_offset. */
     seqlock_write_begin(&timers_state.vm_clock_seqlock);
     if (!timers_state.cpu_ticks_enabled) {
+        int64_t cur_clock = get_clock();
+
         timers_state.cpu_ticks_offset -= cpu_get_host_ticks();
-        timers_state.cpu_clock_offset -= get_clock();
+        timers_state.cpu_clock_offset -= cur_clock;
         timers_state.cpu_ticks_enabled = 1;
+
+        /* Fast-forward suspended clocks */
+        timers_state.cpu_clock_prev = cur_clock + timers_state.cpu_clock_offset;
+        timers_state.cpu_clock_prev_scaled = timers_state.cpu_clock_prev;
     }
     seqlock_write_end(&timers_state.vm_clock_seqlock);
 }
