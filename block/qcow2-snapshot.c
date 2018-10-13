@@ -238,8 +238,11 @@ static int qcow2_write_snapshots(BlockDriverState *bs)
         goto fail;
     }
 
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wunused-local-typedefs"
     QEMU_BUILD_BUG_ON(offsetof(QCowHeader, snapshots_offset) !=
         offsetof(QCowHeader, nb_snapshots) + sizeof(header_data.nb_snapshots));
+#pragma GCC diagnostic pop
 
     header_data.nb_snapshots        = cpu_to_be32(s->nb_snapshots);
     header_data.snapshots_offset    = cpu_to_be64(snapshots_offset);
