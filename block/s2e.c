@@ -247,6 +247,28 @@ err:
     return -ret;
 }
 
+static int s2e_reopen_fd(BlockDriverState *bs)
+{
+    int ret = 0;
+    BDRVS2EState *s = bs->opaque;
+
+    if (fclose(s->image_file) < 0) {
+        ret = errno;
+        fprintf(stderr, "Could not close old file descriptor for %s\n", s->image_file_path);
+        goto err;
+    }
+
+    s->image_file = fopen(s->image_file_path, "rb");
+    if (!s->image_file) {
+        fprintf(stderr, "Could not open %s\n", s->image_file_path);
+        ret = errno;
+        goto err;
+    }
+
+err:
+    return -ret;
+}
+
 static int s2e_blk_is_dirty(BDRVS2EState *s, uint64_t sector_num)
 {
     uint64_t l1_index = sector_num / S2EB_L2_SECTORS;
@@ -1058,6 +1080,8 @@ static BlockDriver bdrv_s2e = {
     .bdrv_load_vmstate    = s2e_load_vmstate,
 
     .bdrv_co_ioctl         = s2e_ioctl,
+
+    .bdrv_reopen_fd = s2e_reopen_fd
 };
 
 static void bdrv_s2e_init(void)
