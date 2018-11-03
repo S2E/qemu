@@ -382,3 +382,10 @@ static void __attribute__((__constructor__)) rcu_init(void)
 #endif
     rcu_init_complete();
 }
+
+void rcu_reset(void)
+{
+    smp_mb_global_init();
+    memset(&registry, 0, sizeof(registry));
+    rcu_init_complete();
+}

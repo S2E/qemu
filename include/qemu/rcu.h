@@ -48,6 +48,12 @@ extern "C" {
 #endif
 
 /*
+ * The child of a process that has just forked must call this function
+ * in order to re-initialize internal data structures.
+ */
+void rcu_reset(void);
+
+/*
  * Global quiescent period counter with low-order bits unused.
  * Using a int rather than a char to eliminate false register dependencies
  * causing stalls on some architectures.
