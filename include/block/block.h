@@ -298,6 +298,7 @@ BlockDriverState *bdrv_new_open_driver(BlockDriver *drv, const char *node_name,
 BlockReopenQueue *bdrv_reopen_queue(BlockReopenQueue *bs_queue,
                                     BlockDriverState *bs,
                                     QDict *options, int flags);
+
 int bdrv_reopen_multiple(AioContext *ctx, BlockReopenQueue *bs_queue, Error **errp);
 int bdrv_reopen(BlockDriverState *bs, int bdrv_flags, Error **errp);
 int bdrv_reopen_prepare(BDRVReopenState *reopen_state,
@@ -409,6 +410,9 @@ void coroutine_fn bdrv_co_drain(BlockDriverState *bs);
 void bdrv_drain_all_begin(void);
 void bdrv_drain_all_end(void);
 void bdrv_drain_all(void);
+
+int bdrv_reopen_fds(void);
+int bdrv_reopen_fd(BlockDriverState *bs);
 
 /* Returns NULL when bs == NULL */
 AioWait *bdrv_get_aio_wait(BlockDriverState *bs);

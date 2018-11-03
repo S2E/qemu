@@ -5343,3 +5343,11 @@ bool bdrv_can_store_new_dirty_bitmap(BlockDriverState *bs, const char *name,
 
     return drv->bdrv_can_store_new_dirty_bitmap(bs, name, granularity, errp);
 }
+
+int bdrv_reopen_fd(BlockDriverState *bs)
+{
+    if (!bs->drv || !bs->drv->bdrv_reopen_fd) {
+        return -1;
+    }
+    return bs->drv->bdrv_reopen_fd(bs);
+}

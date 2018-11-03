@@ -2008,6 +2008,32 @@ int bdrv_flush_all(void)
     return result;
 }
 
+/**
+ * Reopens all file descriptors opened by block drivers.
+ * This is can be used when forking new QEMU instances.
+ */
+int bdrv_reopen_fds(void)
+{
+    BdrvNextIterator it;
+    BlockDriverState *bs = NULL;
+    int result = 0;
+
+    for (bs = bdrv_first(&it); bs; bs = bdrv_next(&it)) {
+        AioContext *aio_context = bdrv_get_aio_context(bs);
+        int ret;
+
+        aio_context_acquire(aio_context);
+        ret = bdrv_reopen_fd(bs);
+        if (ret < 0 && !result) {
+            result = ret;
+        }
+        aio_context_release(aio_context);
+    }
+
+    return result;
+}
+
+
 
 typedef struct BdrvCoBlockStatusData {
     BlockDriverState *bs;
