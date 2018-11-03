@@ -405,6 +405,25 @@ static void co_schedule_bh_cb(void *opaque)
     }
 }
 
+int aio_context_renew(AioContext *ctx)
+{
+    int ret;
+
+    assert(QSLIST_EMPTY(&ctx->scheduled_coroutines));
+
+    aio_context_reinit(ctx);
+
+    ret = event_notifier_reinit(&ctx->notifier);
+    if (ret < 0) {
+        return -1;
+    }
+
+    g_source_set_can_recurse(&ctx->source, true);
+    qemu_lockcnt_init(&ctx->list_lock);
+
+    return 0;
+}
+
 AioContext *aio_context_new(Error **errp)
 {
     int ret;

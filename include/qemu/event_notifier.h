@@ -31,6 +31,7 @@ struct EventNotifier {
 typedef void EventNotifierHandler(EventNotifier *);
 
 int event_notifier_init(EventNotifier *, int active);
+int event_notifier_reinit(EventNotifier *e);
 void event_notifier_cleanup(EventNotifier *);
 int event_notifier_set(EventNotifier *);
 int event_notifier_test_and_clear(EventNotifier *);

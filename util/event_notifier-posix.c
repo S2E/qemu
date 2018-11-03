@@ -32,6 +32,20 @@ void event_notifier_init_fd(EventNotifier *e, int fd)
 }
 #endif
 
+int event_notifier_reinit(EventNotifier *e)
+{
+    int old_rfd = e->rfd;
+    int old_wfd = e->wfd;
+
+    /* It's ok if both fds are the same */
+    close(old_rfd);
+    close(old_wfd);
+
+    int ret = event_notifier_init(e, false);
+    assert(e->rfd == old_rfd && e->wfd == old_wfd);
+    return ret;
+}
+
 int event_notifier_init(EventNotifier *e, int active)
 {
     int fds[2];

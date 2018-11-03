@@ -713,6 +713,17 @@ void aio_context_setup(AioContext *ctx)
 #endif
 }
 
+void aio_context_reinit(AioContext *ctx)
+{
+    if (ctx->epollfd) {
+        int old_fd = ctx->epollfd;
+        close(ctx->epollfd);
+        ctx->epollfd = 0;
+        aio_context_setup(ctx);
+        assert(ctx->epollfd == old_fd);
+    }
+}
+
 void aio_context_destroy(AioContext *ctx)
 {
 #ifdef CONFIG_EPOLL_CREATE1

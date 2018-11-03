@@ -158,6 +158,8 @@ struct AioContext {
  */
 AioContext *aio_context_new(Error **errp);
 
+int aio_context_renew(AioContext *ctx);
+
 /**
  * aio_context_ref:
  * @ctx: The AioContext to operate on.
@@ -556,6 +558,8 @@ static inline bool in_aio_context_home_thread(AioContext *ctx)
  * Initialize the aio context.
  */
 void aio_context_setup(AioContext *ctx);
+
+void aio_context_reinit(AioContext *ctx);
 
 /**
  * aio_context_destroy:
