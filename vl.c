@@ -1875,6 +1875,96 @@ static void main_loop(void)
     }
 }
 
+static pthread_t s_main_loop_thread;
+volatile bool g_main_loop_thread_inited = false;
+
+static void *main_loop_thread(void *arg)
+{
+    sigset_t set, oldset;
+    Error *main_loop_err = NULL;
+
+    /*
+     * This thread is created from the old CPU thread,
+     * which has its signals disabled. Since thread creation
+     * inherits the signal mask from the parent thread, we must
+     * reset it here. Failing to do so will prevent QEMU from
+     * reacting to signals and execution may get stuck.
+     */
+    sigemptyset(&set);
+    pthread_sigmask(SIG_SETMASK, &set, &oldset);
+
+    rcu_reset();
+    monitor_resurrect();
+    qemu_init_cpu_loop();
+
+    if (qemu_init_main_loop_reinit(&main_loop_err)) {
+        error_report_err(main_loop_err);
+        abort();
+    }
+
+    qemu_mutex_lock_iothread();
+
+    os_setup_signal_handling();
+
+    g_main_loop_thread_inited = true;
+
+    main_loop();
+
+    // TODO: deduplicate this with main()
+    gdbserver_cleanup();
+
+    /* No more vcpu or device emulation activity beyond this point */
+    vm_shutdown();
+
+    job_cancel_sync_all();
+    bdrv_close_all();
+
+    res_free();
+
+    /* vhost-user must be cleaned up before chardevs.  */
+    tpm_cleanup();
+    net_cleanup();
+    audio_cleanup();
+    monitor_cleanup();
+    qemu_chr_cleanup();
+    user_creatable_cleanup();
+    migration_object_finalize();
+    /* TODO: unref root container, check all devices are ok */
+
+    /* Call exit explicitely to run atexit handlers, as this is not the main thread */
+    exit(0);
+    return NULL;
+}
+
+int respawn_main_thread(void)
+{
+    int ret;
+    pthread_attr_t attr;
+
+    ret = pthread_attr_init(&attr);
+    if (ret < 0) {
+        fprintf(stderr, "Could not init thread attributes\n");
+        goto err1;
+    }
+
+    ret = pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
+    if (ret < 0) {
+        fprintf(stderr, "Could not set detached state for thread\n");
+        goto err1;
+    }
+
+    ret = pthread_create(&s_main_loop_thread, &attr, main_loop_thread, NULL);
+    if (ret < 0) {
+        fprintf(stderr, "could not create timer thread\n");
+        goto err1;
+    }
+
+    pthread_attr_destroy(&attr);
+
+err1:
+    return ret;
+}
+
 static void version(void)
 {
     printf("QEMU emulator version " QEMU_FULL_VERSION "\n"

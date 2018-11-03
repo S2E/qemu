@@ -90,6 +90,8 @@ void tcg_exec_init(unsigned long tb_size);
 void cpu_exec_init_all(void);
 void cpu_exec_step_atomic(CPUState *cpu);
 
+int respawn_main_thread(void);
+
 /**
  * set_preferred_target_page_bits:
  * @bits: number of bits needed to represent an address within the page

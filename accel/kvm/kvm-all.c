@@ -2125,6 +2125,32 @@ static void kvm_eat_signals(CPUState *cpu)
     } while (sigismember(&chkset, SIG_IPI));
 }
 
+
+extern volatile bool g_main_loop_thread_inited;
+static void kvm_clone_process(CPUState *env)
+{
+    qemu_thread_get_self(env->thread);
+    env->thread_id = qemu_get_thread_id();
+    qemu_cond_init(env->halt_cond);
+
+    g_main_loop_thread_inited = false;
+
+    // XXX: are these actually needed?
+    // bdrv_drain_all_begin();
+    // bdrv_flush_all();
+
+    // qemu_chr_reopen();
+    bdrv_reopen_fds();
+
+    int ret = respawn_main_thread();
+    if (ret < 0) {
+        fprintf(stderr, "could not create main loop thread\n");
+        abort();
+    }
+
+    while (!g_main_loop_thread_inited);
+}
+
 int kvm_cpu_exec(CPUState *cpu)
 {
     struct kvm_run *run = cpu->kvm_run;
@@ -2275,6 +2301,12 @@ int kvm_cpu_exec(CPUState *cpu)
         case KVM_EXIT_RESTORE_DEV_STATE:
             qemu_mutex_lock_iothread();
             kvm_dev_restore_snapshot();
+            qemu_mutex_unlock_iothread();
+            ret = 0;
+            break;
+        case KVM_EXIT_CLONE_PROCESS:
+            qemu_mutex_lock_iothread();
+            kvm_clone_process(cpu);
             qemu_mutex_unlock_iothread();
             ret = 0;
             break;

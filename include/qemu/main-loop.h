@@ -45,6 +45,14 @@
 int qemu_init_main_loop(Error **errp);
 
 /**
+ * qemu_init_main_loop_reinit: reinitializes the main loop after a process fork.
+ *
+ * This function recreates the minimum amount of state that is necessary
+ * in order to let the QEMU child run after the parent QEMU instance forked.
+ */
+int qemu_init_main_loop_reinit(Error **errp);
+
+/**
  * main_loop_wait: Run one iteration of the main loop.
  *
  * If @nonblocking is true, poll for events, otherwise suspend until
