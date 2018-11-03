@@ -13,6 +13,8 @@
 #ifndef QEMU_THREAD_COMMON_H
 #define QEMU_THREAD_COMMON_H
 
+#include <execinfo.h>
+
 #include "qemu/typedefs.h"
 #include "qemu/thread.h"
 #include "trace.h"
@@ -38,6 +40,7 @@ static inline void qemu_mutex_post_lock(QemuMutex *mutex,
 #ifdef CONFIG_DEBUG_MUTEX
     mutex->file = file;
     mutex->line = line;
+    backtrace(mutex->backtrace, sizeof(mutex->backtrace) / sizeof(mutex->backtrace[0]));
 #endif
     trace_qemu_mutex_locked(mutex, file, line);
 }
@@ -48,6 +51,7 @@ static inline void qemu_mutex_pre_unlock(QemuMutex *mutex,
 #ifdef CONFIG_DEBUG_MUTEX
     mutex->file = NULL;
     mutex->line = 0;
+    backtrace(mutex->backtrace, sizeof(mutex->backtrace) / sizeof(mutex->backtrace[0]));
 #endif
     trace_qemu_mutex_unlock(mutex, file, line);
 }
