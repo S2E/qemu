@@ -4562,6 +4562,11 @@ static void monitor_iothread_init(void)
                                 NULL);
 }
 
+void monitor_resurrect(void)
+{
+    iothread_resurrect(mon_iothread);
+}
+
 void monitor_init_globals(void)
 {
     monitor_init_qmp_commands();
