@@ -139,7 +139,7 @@ static void iothread_instance_finalize(Object *obj)
     qemu_mutex_destroy(&iothread->init_done_lock);
 }
 
-static void iothread_complete(UserCreatable *obj, Error **errp)
+static void iothread_complete_ex(UserCreatable *obj, Error **errp, bool renew)
 {
     Error *local_error = NULL;
     IOThread *iothread = IOTHREAD(obj);
@@ -148,7 +148,15 @@ static void iothread_complete(UserCreatable *obj, Error **errp)
     iothread->stopping = false;
     iothread->running = true;
     iothread->thread_id = -1;
-    iothread->ctx = aio_context_new(&local_error);
+
+    if (renew) {
+        if (aio_context_renew(iothread->ctx) < 0) {
+            abort();
+        }
+    } else {
+        iothread->ctx = aio_context_new(&local_error);
+    }
+
     if (!iothread->ctx) {
         error_propagate(errp, local_error);
         return;
@@ -187,6 +195,17 @@ static void iothread_complete(UserCreatable *obj, Error **errp)
                        &iothread->init_done_lock);
     }
     qemu_mutex_unlock(&iothread->init_done_lock);
+}
+
+static void iothread_complete(UserCreatable *obj, Error **errp)
+{
+    iothread_complete_ex(obj, errp, false);
+}
+
+void iothread_resurrect(IOThread *iothread)
+{
+    Error *errp;
+    iothread_complete_ex(USER_CREATABLE(iothread), &errp, true);
 }
 
 typedef struct {

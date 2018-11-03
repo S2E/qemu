@@ -56,4 +56,6 @@ IOThread *iothread_create(const char *id, Error **errp);
 void iothread_stop(IOThread *iothread);
 void iothread_destroy(IOThread *iothread);
 
+void iothread_resurrect(IOThread *thread);
+
 #endif /* IOTHREAD_H */
