@@ -461,6 +461,10 @@ static void patch_instruction(VAPICROMState *s, X86CPU *cpu, target_ulong ip)
 void vapic_report_tpr_access(DeviceState *dev, CPUState *cs, target_ulong ip,
                              TPRAccess access)
 {
+    if (kvm_dbt_enabled()) {
+        return;
+    }
+
     VAPICROMState *s = VAPIC(dev);
     X86CPU *cpu = X86_CPU(cs);
     CPUX86State *env = &cpu->env;
@@ -641,6 +645,10 @@ static int vapic_prepare(VAPICROMState *s)
 static void vapic_write(void *opaque, hwaddr addr, uint64_t data,
                         unsigned int size)
 {
+    if (kvm_dbt_enabled()) {
+        return;
+    }
+
     VAPICROMState *s = opaque;
     X86CPU *cpu;
     CPUX86State *env;
