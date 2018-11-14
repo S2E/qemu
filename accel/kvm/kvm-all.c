@@ -155,6 +155,9 @@ static bool kvm_dev_snapshot;
 static bool kvm_has_clock_scale;
 #endif
 
+bool kvm_has_dbt;
+
+
 static const KVMCapabilityInfo kvm_required_capabilites[] = {
     KVM_CAP_INFO(USER_MEMORY),
     KVM_CAP_INFO(DESTROY_MEMORY_REGION_WORKS),
@@ -1667,6 +1670,13 @@ static int kvm_dev_restore_snapshot(void)
 }
 #endif
 
+#ifdef KVM_CAP_KVM
+int kvm_has_dbt(void) {
+    return kvm_has_dbt;
+}
+#else
+
+#endif
 
 static int kvm_init(MachineState *ms)
 {
@@ -1883,6 +1893,14 @@ static int kvm_init(MachineState *ms)
     if (kvm_has_clock_scale) {
         kvm_vm_ioctl(s, KVM_SET_CLOCK_SCALE, cpu_get_clock_scale_ptr());
     }
+#endif
+
+#ifdef KVM_CAP_DBT
+    // This checks whether the KVM provider uses DBT or native KVM.
+    // DBT may have a few limitations regarding CPU state consistency
+    // expected by virtual devices (especially VAPIC), so this flag
+    // lets these devices to take into account the different behavior.
+    kvm_has_dbt = kvm_check_extension(s, KVM_CAP_DBT);
 #endif
 
     kvm_state = s;

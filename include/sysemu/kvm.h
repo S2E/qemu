@@ -46,6 +46,8 @@ extern bool kvm_direct_msi_allowed;
 extern bool kvm_ioeventfd_any_length_allowed;
 extern bool kvm_msi_use_devid;
 
+extern bool kvm_has_dbt;
+
 #define kvm_enabled()           (kvm_allowed)
 /**
  * kvm_irqchip_in_kernel:
@@ -167,6 +169,13 @@ extern bool kvm_msi_use_devid;
  */
 #define kvm_msi_devid_required() (kvm_msi_use_devid)
 
+/**
+ * kvm_dbt_enabled:
+ * Returns: true if the KVM provider (/dev/kvm) uses DBT instead
+ * of actual hardware virtualization.
+ */
+#define kvm_dbt_enabled() (kvm_has_dbt)
+
 #else
 
 #define kvm_enabled()           (0)
@@ -184,6 +193,7 @@ extern bool kvm_msi_use_devid;
 #define kvm_direct_msi_enabled() (false)
 #define kvm_ioeventfd_any_length_enabled() (false)
 #define kvm_msi_devid_required() (false)
+#define kvm_dbt_enabled() (false)
 
 #endif  /* CONFIG_KVM_IS_POSSIBLE */
 

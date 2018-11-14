@@ -979,6 +979,9 @@ struct kvm_ppc_resize_hpt {
 /* This capability allows a clock to be slowed down via a clock scaling factor */
 #define KVM_CAP_CPU_CLOCK_SCALE 1022
 
+/* Indicates that the KVM provided uses DBT instead of actual KVM */
+#define KVM_CAP_DBT 259
+
 /****************************************/
 
 #ifdef KVM_CAP_IRQ_ROUTING
