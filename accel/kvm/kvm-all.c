@@ -1538,6 +1538,10 @@ int kvm_has_mem_rw(void)
 
 int kvm_mem_rw(void *dest, const void *source, uint64_t size, int is_write)
 {
+    if (!kvm_has_mem_rw()) {
+        return -1;
+    }
+
     struct kvm_mem_rw rw;
     rw.dest = (uintptr_t) dest;
     rw.source = (uintptr_t) source;
@@ -1565,6 +1569,10 @@ int kvm_has_disk_rw(void)
 
 int kvm_disk_rw(void *buffer, uint64_t sector, int count, int is_write)
 {
+    if (!kvm_has_disk_rw()) {
+        return -1;
+    }
+
     int ret;
     struct kvm_disk_rw rw;
     rw.host_address = (uintptr_t) buffer;
