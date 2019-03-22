@@ -4795,6 +4795,10 @@ int main(int argc, char **argv, char **envp)
     accel_setup_post(current_machine);
     os_setup_post();
 
+#ifdef CONFIG_POSIX
+    register_atfork_cb();
+#endif
+
     main_loop();
 
     if (periodic_screenshot) {

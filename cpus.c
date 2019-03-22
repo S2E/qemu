@@ -1143,6 +1143,34 @@ static QemuCond qemu_cpu_cond;
 /* system init */
 static QemuCond qemu_pause_cond;
 
+#ifdef CONFIG_POSIX
+static void fork_prepare(void) 
+{
+    if (qemu_in_vcpu_thread()) {
+        qemu_mutex_lock(&qemu_global_mutex);
+    }
+}
+
+static void fork_done_parent(void)
+{
+    if (qemu_in_vcpu_thread()) {
+        qemu_mutex_unlock(&qemu_global_mutex);
+    }
+}
+
+static void fork_done_child(void)
+{
+    if (qemu_in_vcpu_thread()) {
+        qemu_mutex_init(&qemu_global_mutex);
+    }
+}
+
+void register_atfork_cb(void)
+{
+    pthread_atfork(fork_prepare, fork_done_parent, fork_done_child);
+}
+#endif
+
 void qemu_init_cpu_loop(void)
 {
     qemu_init_sigbus();
