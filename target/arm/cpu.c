@@ -1023,7 +1023,10 @@ static void arm_cpu_realizefn(DeviceState *dev, Error **errp)
         cpu->core_count = smp_cpus;
     }
 #endif
-
+    /* Before Sync arm cortex-m kvm vcpu, we need to reset cpu first to set the init regs.*/
+    if (arm_feature(&cpu->env, ARM_FEATURE_M)){
+        cpu_reset(cs);
+    }
     qemu_init_vcpu(cs);
     cpu_reset(cs);
 
