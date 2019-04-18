@@ -1,3 +1,5 @@
+my.vim*
+*.swp
 qemu.creator
 qemu.files
 qemu.includes

@@ -37,6 +37,23 @@ static bool cap_has_mp_state;
 
 static ARMHostCPUFeatures arm_host_cpu_features;
 
+int kvm_cortex_m_vcpu_init(CPUState *cs) 
+{
+    ARMCPU *cpu = ARM_CPU(cs);
+    CPUARMState *env=&cpu->env;
+    struct kvm_m_regs regs;
+    struct kvm_m_sregs sregs;
+    memcpy(regs.regs,env->regs,sizeof(regs.regs));
+    sregs.thumb=env->thumb;
+    sregs.vecbase=env->v7m.vecbase[0];
+    sregs.other_sp=env->v7m.other_sp;
+    sregs.basepri=env->v7m.basepri[0];
+    sregs.control=env->v7m.control[0];
+    kvm_vcpu_ioctl(cs, KVM_SET_M_REGS, &regs);  
+    kvm_vcpu_ioctl(cs, KVM_SET_M_SREGS, &sregs);
+    return 0;
+}
+
 int kvm_arm_vcpu_init(CPUState *cs)
 {
     ARMCPU *cpu = ARM_CPU(cs);

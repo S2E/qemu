@@ -173,51 +173,58 @@ int kvm_arch_init_vcpu(CPUState *cs)
     struct kvm_one_reg r;
     ARMCPU *cpu = ARM_CPU(cs);
 
-    if (cpu->kvm_target == QEMU_KVM_ARM_TARGET_NONE) {
-        fprintf(stderr, "KVM is not supported for this guest CPU type\n");
-        return -EINVAL;
+    if (arm_feature(&cpu->env, ARM_FEATURE_M)){
+        ret = kvm_cortex_m_vcpu_init(cs);
     }
+    else {
+        if (cpu->kvm_target == QEMU_KVM_ARM_TARGET_NONE) {
+            fprintf(stderr, "KVM is not supported for this guest CPU type\n");
+            return -EINVAL;
+        }
 
-    /* Determine init features for this CPU */
-    memset(cpu->kvm_init_features, 0, sizeof(cpu->kvm_init_features));
-    if (cpu->start_powered_off) {
-        cpu->kvm_init_features[0] |= 1 << KVM_ARM_VCPU_POWER_OFF;
-    }
-    if (kvm_check_extension(cs->kvm_state, KVM_CAP_ARM_PSCI_0_2)) {
-        cpu->psci_version = 2;
-        cpu->kvm_init_features[0] |= 1 << KVM_ARM_VCPU_PSCI_0_2;
-    }
+        /* Determine init features for this CPU */
+        memset(cpu->kvm_init_features, 0, sizeof(cpu->kvm_init_features));
+        if (cpu->start_powered_off) {
+            cpu->kvm_init_features[0] |= 1 << KVM_ARM_VCPU_POWER_OFF;
+        }
+        if (kvm_check_extension(cs->kvm_state, KVM_CAP_ARM_PSCI_0_2)) {
+            cpu->psci_version = 2;
+            cpu->kvm_init_features[0] |= 1 << KVM_ARM_VCPU_PSCI_0_2;
+        }
 
-    /* Do KVM_ARM_VCPU_INIT ioctl */
-    ret = kvm_arm_vcpu_init(cs);
-    if (ret) {
-        return ret;
-    }
+        /* Do KVM_ARM_VCPU_INIT ioctl */
+        ret = kvm_arm_vcpu_init(cs);
+        if (ret) {
+            return ret;
+        }
 
-    /* Query the kernel to make sure it supports 32 VFP
-     * registers: QEMU's "cortex-a15" CPU is always a
-     * VFP-D32 core. The simplest way to do this is just
-     * to attempt to read register d31.
-     */
-    r.id = KVM_REG_ARM | KVM_REG_SIZE_U64 | KVM_REG_ARM_VFP | 31;
-    r.addr = (uintptr_t)(&v);
-    ret = kvm_vcpu_ioctl(cs, KVM_GET_ONE_REG, &r);
-    if (ret == -ENOENT) {
-        return -EINVAL;
-    }
+        /* Query the kernel to make sure it supports 32 VFP
+         * registers: QEMU's "cortex-a15" CPU is always a
+         * VFP-D32 core. The simplest way to do this is just
+         * to attempt to read register d31.
+         */
+        r.id = KVM_REG_ARM | KVM_REG_SIZE_U64 | KVM_REG_ARM_VFP | 31;
+        r.addr = (uintptr_t)(&v);
+        ret = kvm_vcpu_ioctl(cs, KVM_GET_ONE_REG, &r);
+        if (ret == -ENOENT) {
+            return -EINVAL;
+        }
 
-    /*
-     * When KVM is in use, PSCI is emulated in-kernel and not by qemu.
-     * Currently KVM has its own idea about MPIDR assignment, so we
-     * override our defaults with what we get from KVM.
-     */
-    ret = kvm_get_one_reg(cs, ARM_CP15_REG32(ARM_CPU_ID_MPIDR), &mpidr);
-    if (ret) {
-        return ret;
-    }
-    cpu->mp_affinity = mpidr & ARM32_AFFINITY_MASK;
+        /*
+         * When KVM is in use, PSCI is emulated in-kernel and not by qemu.
+         * Currently KVM has its own idea about MPIDR assignment, so we
+         * override our defaults with what we get from KVM.
+         */
+        ret = kvm_get_one_reg(cs, ARM_CP15_REG32(ARM_CPU_ID_MPIDR), &mpidr);
+        if (ret) {
+            return ret;
+        }
+        cpu->mp_affinity = mpidr & ARM32_AFFINITY_MASK;
 
-    return kvm_arm_init_cpreg_list(cpu);
+        return kvm_arm_init_cpreg_list(cpu);
+        
+    }
+    return -1;
 }
 
 typedef struct Reg {
