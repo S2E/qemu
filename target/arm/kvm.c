@@ -49,6 +49,8 @@ int kvm_cortex_m_vcpu_init(CPUState *cs)
     sregs.other_sp=env->v7m.other_sp;
     sregs.basepri=env->v7m.basepri[0];
     sregs.control=env->v7m.control[0];
+    sregs.exception=env->v7m.exception;
+    sregs.nvic=env->nvic;
     kvm_vcpu_ioctl(cs, KVM_SET_M_REGS, &regs);  
     kvm_vcpu_ioctl(cs, KVM_SET_M_SREGS, &sregs);
     return 0;
@@ -487,14 +489,20 @@ void kvm_arm_reset_vcpu(ARMCPU *cpu)
     /* Re-init VCPU so that all registers are set to
      * their respective reset values.
      */
-    ret = kvm_arm_vcpu_init(CPU(cpu));
-    if (ret < 0) {
-        fprintf(stderr, "kvm_arm_vcpu_init failed: %s\n", strerror(-ret));
-        abort();
+    if (arm_feature(&cpu->env, ARM_FEATURE_M)){
+        ret = kvm_cortex_m_vcpu_init(CPU(cpu));
     }
-    if (!write_kvmstate_to_list(cpu)) {
-        fprintf(stderr, "write_kvmstate_to_list failed\n");
-        abort();
+    else {
+        ret = kvm_arm_vcpu_init(CPU(cpu));
+        if (ret < 0) {
+            fprintf(stderr, "kvm_arm_vcpu_init failed: %s\n", strerror(-ret));
+            abort();
+        }
+        if (!write_kvmstate_to_list(cpu)) {
+            fprintf(stderr, "write_kvmstate_to_list failed\n");
+            abort();
+        }
+    
     }
 }
 

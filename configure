@@ -1908,6 +1908,7 @@ EOF
   if compile_prog "-fPIE -DPIE" "-pie"; then
     QEMU_CFLAGS="-fPIE -DPIE $QEMU_CFLAGS"
     LDFLAGS="-pie $LDFLAGS"
+    LDFLAGS="-rdynamic $LDFLAGS"
     pie="yes"
     if compile_prog "" "-Wl,-z,relro -Wl,-z,now" ; then
       LDFLAGS="-Wl,-z,relro -Wl,-z,now $LDFLAGS"

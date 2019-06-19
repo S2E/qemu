@@ -22,6 +22,7 @@
 
 #include "kvm-consts.h"
 #include "hw/registerfields.h"
+#include "nvic/nvic_interfaces.h"
 
 #if defined(TARGET_AARCH64)
   /* AArch64 definitions */
@@ -1649,7 +1650,7 @@ static inline bool armv7m_nvic_can_take_pending_exception(void *opaque)
  * if @secure is true and @irq does not specify one of the fixed set
  * of architecturally banked exceptions.
  */
-void armv7m_nvic_set_pending(void *opaque, int irq, bool secure);
+//void armv7m_nvic_set_pending(void *opaque, int irq, bool secure);
 /**
  * armv7m_nvic_set_pending_derived: mark this derived exception as pending
  * @opaque: the NVIC
@@ -1676,8 +1677,8 @@ void armv7m_nvic_set_pending_derived(void *opaque, int irq, bool secure);
  * to true if the current highest priority pending exception should
  * be taken to Secure state, false for NS.
  */
-void armv7m_nvic_get_pending_irq_info(void *opaque, int *pirq,
-                                      bool *ptargets_secure);
+//void armv7m_nvic_get_pending_irq_info(void *opaque, int *pirq,
+//                                      bool *ptargets_secure);
 /**
  * armv7m_nvic_acknowledge_irq: make highest priority pending exception active
  * @opaque: the NVIC
@@ -1686,7 +1687,7 @@ void armv7m_nvic_get_pending_irq_info(void *opaque, int *pirq,
  * state to the active state, and update v7m.exception to indicate that
  * it is the exception currently being handled.
  */
-void armv7m_nvic_acknowledge_irq(void *opaque);
+//void armv7m_nvic_acknowledge_irq(void *opaque);
 /**
  * armv7m_nvic_complete_irq: complete specified interrupt or exception
  * @opaque: the NVIC
@@ -1698,7 +1699,7 @@ void armv7m_nvic_acknowledge_irq(void *opaque);
  *           0 if there is still an irq active after this one was completed
  * (Ignoring -1, this is the same as the RETTOBASE value before completion.)
  */
-int armv7m_nvic_complete_irq(void *opaque, int irq, bool secure);
+//int armv7m_nvic_complete_irq(void *opaque, int irq, bool secure);
 /**
  * armv7m_nvic_raw_execution_priority: return the raw execution priority
  * @opaque: the NVIC

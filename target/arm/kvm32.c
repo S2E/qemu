@@ -174,7 +174,7 @@ int kvm_arch_init_vcpu(CPUState *cs)
     ARMCPU *cpu = ARM_CPU(cs);
 
     if (arm_feature(&cpu->env, ARM_FEATURE_M)){
-        ret = kvm_cortex_m_vcpu_init(cs);
+        return kvm_cortex_m_vcpu_init(cs);
     }
     else {
         if (cpu->kvm_target == QEMU_KVM_ARM_TARGET_NONE) {
@@ -313,83 +313,88 @@ int kvm_arch_put_registers(CPUState *cs, int level)
     int ret, i;
     uint32_t cpsr, fpscr;
 
-    /* Make sure the banked regs are properly set */
-    mode = env->uncached_cpsr & CPSR_M;
-    bn = bank_number(mode);
-    if (mode == ARM_CPU_MODE_FIQ) {
-        memcpy(env->fiq_regs, env->regs + 8, 5 * sizeof(uint32_t));
-    } else {
-        memcpy(env->usr_regs, env->regs + 8, 5 * sizeof(uint32_t));
+    if (arm_feature(&cpu->env, ARM_FEATURE_M)){
+        return kvm_cortex_m_vcpu_init(cs);
     }
-    env->banked_r13[bn] = env->regs[13];
-    env->banked_r14[bn] = env->regs[14];
-    env->banked_spsr[bn] = env->spsr;
+    else{
+        /* Make sure the banked regs are properly set */
+        mode = env->uncached_cpsr & CPSR_M;
+        bn = bank_number(mode);
+        if (mode == ARM_CPU_MODE_FIQ) {
+            memcpy(env->fiq_regs, env->regs + 8, 5 * sizeof(uint32_t));
+        } else {
+            memcpy(env->usr_regs, env->regs + 8, 5 * sizeof(uint32_t));
+        }
+        env->banked_r13[bn] = env->regs[13];
+        env->banked_r14[bn] = env->regs[14];
+        env->banked_spsr[bn] = env->spsr;
 
-    /* Now we can safely copy stuff down to the kernel */
-    for (i = 0; i < ARRAY_SIZE(regs); i++) {
-        r.id = regs[i].id;
-        r.addr = (uintptr_t)(env) + regs[i].offset;
+        /* Now we can safely copy stuff down to the kernel */
+        for (i = 0; i < ARRAY_SIZE(regs); i++) {
+            r.id = regs[i].id;
+            r.addr = (uintptr_t)(env) + regs[i].offset;
+            ret = kvm_vcpu_ioctl(cs, KVM_SET_ONE_REG, &r);
+            if (ret) {
+                return ret;
+            }
+        }
+
+        /* Special cases which aren't a single CPUARMState field */
+        cpsr = cpsr_read(env);
+        r.id = KVM_REG_ARM | KVM_REG_SIZE_U32 |
+            KVM_REG_ARM_CORE | KVM_REG_ARM_CORE_REG(usr_regs.ARM_cpsr);
+        r.addr = (uintptr_t)(&cpsr);
         ret = kvm_vcpu_ioctl(cs, KVM_SET_ONE_REG, &r);
         if (ret) {
             return ret;
         }
-    }
 
-    /* Special cases which aren't a single CPUARMState field */
-    cpsr = cpsr_read(env);
-    r.id = KVM_REG_ARM | KVM_REG_SIZE_U32 |
-        KVM_REG_ARM_CORE | KVM_REG_ARM_CORE_REG(usr_regs.ARM_cpsr);
-    r.addr = (uintptr_t)(&cpsr);
-    ret = kvm_vcpu_ioctl(cs, KVM_SET_ONE_REG, &r);
-    if (ret) {
-        return ret;
-    }
+        /* VFP registers */
+        r.id = KVM_REG_ARM | KVM_REG_SIZE_U64 | KVM_REG_ARM_VFP;
+        for (i = 0; i < 32; i++) {
+            r.addr = (uintptr_t)aa32_vfp_dreg(env, i);
+            ret = kvm_vcpu_ioctl(cs, KVM_SET_ONE_REG, &r);
+            if (ret) {
+                return ret;
+            }
+            r.id++;
+        }
 
-    /* VFP registers */
-    r.id = KVM_REG_ARM | KVM_REG_SIZE_U64 | KVM_REG_ARM_VFP;
-    for (i = 0; i < 32; i++) {
-        r.addr = (uintptr_t)aa32_vfp_dreg(env, i);
+        r.id = KVM_REG_ARM | KVM_REG_SIZE_U32 | KVM_REG_ARM_VFP |
+            KVM_REG_ARM_VFP_FPSCR;
+        fpscr = vfp_get_fpscr(env);
+        r.addr = (uintptr_t)&fpscr;
         ret = kvm_vcpu_ioctl(cs, KVM_SET_ONE_REG, &r);
         if (ret) {
             return ret;
         }
-        r.id++;
-    }
 
-    r.id = KVM_REG_ARM | KVM_REG_SIZE_U32 | KVM_REG_ARM_VFP |
-        KVM_REG_ARM_VFP_FPSCR;
-    fpscr = vfp_get_fpscr(env);
-    r.addr = (uintptr_t)&fpscr;
-    ret = kvm_vcpu_ioctl(cs, KVM_SET_ONE_REG, &r);
-    if (ret) {
+        /* Note that we do not call write_cpustate_to_list()
+         * here, so we are only writing the tuple list back to
+         * KVM. This is safe because nothing can change the
+         * CPUARMState cp15 fields (in particular gdb accesses cannot)
+         * and so there are no changes to sync. In fact syncing would
+         * be wrong at this point: for a constant register where TCG and
+         * KVM disagree about its value, the preceding write_list_to_cpustate()
+         * would not have had any effect on the CPUARMState value (since the
+         * register is read-only), and a write_cpustate_to_list() here would
+         * then try to write the TCG value back into KVM -- this would either
+         * fail or incorrectly change the value the guest sees.
+         *
+         * If we ever want to allow the user to modify cp15 registers via
+         * the gdb stub, we would need to be more clever here (for instance
+         * tracking the set of registers kvm_arch_get_registers() successfully
+         * managed to update the CPUARMState with, and only allowing those
+         * to be written back up into the kernel).
+         */
+        if (!write_list_to_kvmstate(cpu, level)) {
+            return EINVAL;
+        }
+
+        kvm_arm_sync_mpstate_to_kvm(cpu);
+
         return ret;
-    }
-
-    /* Note that we do not call write_cpustate_to_list()
-     * here, so we are only writing the tuple list back to
-     * KVM. This is safe because nothing can change the
-     * CPUARMState cp15 fields (in particular gdb accesses cannot)
-     * and so there are no changes to sync. In fact syncing would
-     * be wrong at this point: for a constant register where TCG and
-     * KVM disagree about its value, the preceding write_list_to_cpustate()
-     * would not have had any effect on the CPUARMState value (since the
-     * register is read-only), and a write_cpustate_to_list() here would
-     * then try to write the TCG value back into KVM -- this would either
-     * fail or incorrectly change the value the guest sees.
-     *
-     * If we ever want to allow the user to modify cp15 registers via
-     * the gdb stub, we would need to be more clever here (for instance
-     * tracking the set of registers kvm_arch_get_registers() successfully
-     * managed to update the CPUARMState with, and only allowing those
-     * to be written back up into the kernel).
-     */
-    if (!write_list_to_kvmstate(cpu, level)) {
-        return EINVAL;
-    }
-
-    kvm_arm_sync_mpstate_to_kvm(cpu);
-
-    return ret;
+    }    
 }
 
 int kvm_arch_get_registers(CPUState *cs)

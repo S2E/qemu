@@ -657,7 +657,7 @@ void armv7m_nvic_set_pending_derived(void *opaque, int irq, bool secure)
 void armv7m_nvic_acknowledge_irq(void *opaque)
 {
     NVICState *s = (NVICState *)opaque;
-    CPUARMState *env = &s->cpu->env;
+    /* CPUARMState *env = &s->cpu->env; */
     const int pending = s->vectpending;
     const int running = nvic_exec_prio(s);
     VecInfo *vec;
@@ -680,7 +680,9 @@ void armv7m_nvic_acknowledge_irq(void *opaque)
     vec->active = 1;
     vec->pending = 0;
 
-    write_v7m_exception(env, s->vectpending);
+    /*IoT s2e move to do_interrupt_v7m comment this function*/
+    /* write_v7m_exception(env, s->vectpending); */
+
 
     nvic_irq_update(s);
 }

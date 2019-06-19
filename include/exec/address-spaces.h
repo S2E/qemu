@@ -34,6 +34,7 @@ MemoryRegion *get_system_memory(void);
 MemoryRegion *get_system_io(void);
 
 extern AddressSpace address_space_memory;
+extern AddressSpace armv7m_space_memory;
 extern AddressSpace address_space_io;
 
 #endif

@@ -2265,12 +2265,19 @@ int kvm_cpu_exec(CPUState *cpu)
             break;
         case KVM_EXIT_MMIO:
             DPRINTF("handle_mmio\n");
-            /* Called outside BQL */
-            address_space_rw(&address_space_memory,
-                             run->mmio.phys_addr, attrs,
-                             run->mmio.data,
-                             run->mmio.len,
-                             run->mmio.is_write);
+            /* SCS region in armv7m space memory */
+            if(run->mmio.phys_addr>0xe0000000)
+                address_space_rw(&armv7m_space_memory,
+                                 run->mmio.phys_addr, attrs,
+                                 run->mmio.data,
+                                 run->mmio.len,
+                                 run->mmio.is_write);
+            else
+                address_space_rw(&address_space_memory,
+                                 run->mmio.phys_addr, attrs,
+                                 run->mmio.data,
+                                 run->mmio.len,
+                                 run->mmio.is_write);
             ret = 0;
             break;
         case KVM_EXIT_IRQ_WINDOW_OPEN:

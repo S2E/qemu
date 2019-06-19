@@ -119,6 +119,7 @@ struct kvm_m_sregs {
     int exception;
     int pending_exception;
     __u32 thumb;
+    void *nvic;
 };
 struct kvm_sregs {
 };
