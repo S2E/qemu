@@ -59,6 +59,26 @@ int kvm_cortex_m_vcpu_init(CPUState *cs)
     return 0;
 }
 
+int kvm_cortex_m_get_regs(CPUState *cs)
+{
+    ARMCPU *cpu = ARM_CPU(cs);
+    CPUARMState *env=&cpu->env;
+
+    struct kvm_m_regs regs;
+    struct kvm_m_sregs sregs;
+
+    kvm_vcpu_ioctl(cs, KVM_GET_M_REGS, &regs);
+    kvm_vcpu_ioctl(cs, KVM_GET_M_SREGS, &sregs);
+    memcpy(env->regs,regs.regs,sizeof(regs.regs));
+
+    env->v7m.vecbase[0] = sregs.vecbase;
+    env->v7m.other_sp = sregs.other_sp;
+    env->v7m.basepri[0] = sregs.basepri;
+    env->v7m.control[0] = sregs.control;
+    env->v7m.exception = sregs.exception;
+    return 0;
+}
+
 int kvm_arm_vcpu_init(CPUState *cs)
 {
     ARMCPU *cpu = ARM_CPU(cs);

@@ -44,6 +44,8 @@
 
 #include "hw/boards.h"
 
+#include "kvm_arm.h"
+
 /* This check must be after config-host.h is included */
 #ifdef CONFIG_EVENTFD
 #include <sys/eventfd.h>
@@ -2344,6 +2346,12 @@ int kvm_cpu_exec(CPUState *cpu)
         case KVM_EXIT_CLONE_PROCESS:
             qemu_mutex_lock_iothread();
             kvm_clone_process(cpu);
+            qemu_mutex_unlock_iothread();
+            ret = 0;
+            break;
+        case KVM_EXIT_SYNC_ARM_V7M_SREGS:
+            qemu_mutex_lock_iothread();
+            kvm_cortex_m_get_regs(cpu);
             qemu_mutex_unlock_iothread();
             ret = 0;
             break;
