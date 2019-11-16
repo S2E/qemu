@@ -405,68 +405,73 @@ int kvm_arch_get_registers(CPUState *cs)
     int ret, i;
     uint32_t cpsr, fpscr;
 
-    for (i = 0; i < ARRAY_SIZE(regs); i++) {
-        r.id = regs[i].id;
-        r.addr = (uintptr_t)(env) + regs[i].offset;
-        ret = kvm_vcpu_ioctl(cs, KVM_GET_ONE_REG, &r);
-        if (ret) {
-            return ret;
-        }
-    }
-
-    /* Special cases which aren't a single CPUARMState field */
-    r.id = KVM_REG_ARM | KVM_REG_SIZE_U32 |
-        KVM_REG_ARM_CORE | KVM_REG_ARM_CORE_REG(usr_regs.ARM_cpsr);
-    r.addr = (uintptr_t)(&cpsr);
-    ret = kvm_vcpu_ioctl(cs, KVM_GET_ONE_REG, &r);
-    if (ret) {
-        return ret;
-    }
-    cpsr_write(env, cpsr, 0xffffffff, CPSRWriteRaw);
-
-    /* Make sure the current mode regs are properly set */
-    mode = env->uncached_cpsr & CPSR_M;
-    bn = bank_number(mode);
-    if (mode == ARM_CPU_MODE_FIQ) {
-        memcpy(env->regs + 8, env->fiq_regs, 5 * sizeof(uint32_t));
+    if (arm_feature(&cpu->env, ARM_FEATURE_M)) {
+        return kvm_cortex_m_get_regs(cs);
     } else {
-        memcpy(env->regs + 8, env->usr_regs, 5 * sizeof(uint32_t));
-    }
-    env->regs[13] = env->banked_r13[bn];
-    env->regs[14] = env->banked_r14[bn];
-    env->spsr = env->banked_spsr[bn];
+        for (i = 0; i < ARRAY_SIZE(regs); i++) {
+            r.id = regs[i].id;
+            r.addr = (uintptr_t)(env) + regs[i].offset;
+            ret = kvm_vcpu_ioctl(cs, KVM_GET_ONE_REG, &r);
+            if (ret) {
+                return ret;
+            }
+        }
 
-    /* VFP registers */
-    r.id = KVM_REG_ARM | KVM_REG_SIZE_U64 | KVM_REG_ARM_VFP;
-    for (i = 0; i < 32; i++) {
-        r.addr = (uintptr_t)aa32_vfp_dreg(env, i);
+        /* Special cases which aren't a single CPUARMState field */
+        r.id = KVM_REG_ARM | KVM_REG_SIZE_U32 |
+            KVM_REG_ARM_CORE | KVM_REG_ARM_CORE_REG(usr_regs.ARM_cpsr);
+        r.addr = (uintptr_t)(&cpsr);
         ret = kvm_vcpu_ioctl(cs, KVM_GET_ONE_REG, &r);
         if (ret) {
             return ret;
         }
-        r.id++;
+        cpsr_write(env, cpsr, 0xffffffff, CPSRWriteRaw);
+
+        /* Make sure the current mode regs are properly set */
+        mode = env->uncached_cpsr & CPSR_M;
+        bn = bank_number(mode);
+        if (mode == ARM_CPU_MODE_FIQ) {
+            memcpy(env->regs + 8, env->fiq_regs, 5 * sizeof(uint32_t));
+        } else {
+            memcpy(env->regs + 8, env->usr_regs, 5 * sizeof(uint32_t));
+        }
+        env->regs[13] = env->banked_r13[bn];
+        env->regs[14] = env->banked_r14[bn];
+        env->spsr = env->banked_spsr[bn];
+
+        /* VFP registers */
+        r.id = KVM_REG_ARM | KVM_REG_SIZE_U64 | KVM_REG_ARM_VFP;
+        for (i = 0; i < 32; i++) {
+            r.addr = (uintptr_t)aa32_vfp_dreg(env, i);
+            ret = kvm_vcpu_ioctl(cs, KVM_GET_ONE_REG, &r);
+            if (ret) {
+                return ret;
+            }
+            r.id++;
+        }
+
+        r.id = KVM_REG_ARM | KVM_REG_SIZE_U32 | KVM_REG_ARM_VFP |
+            KVM_REG_ARM_VFP_FPSCR;
+        r.addr = (uintptr_t)&fpscr;
+        ret = kvm_vcpu_ioctl(cs, KVM_GET_ONE_REG, &r);
+        if (ret) {
+            return ret;
+        }
+        vfp_set_fpscr(env, fpscr);
+
+        if (!write_kvmstate_to_list(cpu)) {
+            return EINVAL;
+        }
+
+        /* Note that it's OK to have registers which aren't in CPUState,
+        * so we can ignore a failure return here.
+        */
+        write_list_to_cpustate(cpu);
+
+        kvm_arm_sync_mpstate_to_qemu(cpu);
+
+        return 0;
     }
-
-    r.id = KVM_REG_ARM | KVM_REG_SIZE_U32 | KVM_REG_ARM_VFP |
-        KVM_REG_ARM_VFP_FPSCR;
-    r.addr = (uintptr_t)&fpscr;
-    ret = kvm_vcpu_ioctl(cs, KVM_GET_ONE_REG, &r);
-    if (ret) {
-        return ret;
-    }
-    vfp_set_fpscr(env, fpscr);
-
-    if (!write_kvmstate_to_list(cpu)) {
-        return EINVAL;
-    }
-    /* Note that it's OK to have registers which aren't in CPUState,
-     * so we can ignore a failure return here.
-     */
-    write_list_to_cpustate(cpu);
-
-    kvm_arm_sync_mpstate_to_qemu(cpu);
-
-    return 0;
 }
 
 int kvm_arch_insert_sw_breakpoint(CPUState *cs, struct kvm_sw_breakpoint *bp)
