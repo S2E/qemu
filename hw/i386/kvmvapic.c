@@ -433,7 +433,7 @@ static void do_patch_instruction(CPUState *cs, run_on_cpu_data data)
         patch_call(x86_cpu, ip + 1, handlers->get_tpr_stack);
         break;
     default:
-        abort();
+        fprintf(stderr, "kvmvapic: invalid byte, patching failed\n");
     }
 
     g_free(info);
