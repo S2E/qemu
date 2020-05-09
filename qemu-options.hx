@@ -4483,3 +4483,13 @@ HXCOMM This is the last statement. Insert new options before this line!
 STEXI
 @end table
 ETEXI
+
+DEF("savevm-on-reboot", HAS_ARG, QEMU_OPTION_savevm_on_reboot, \
+    "-savevm-on-reboot id\n" \
+    "                save state on machine reboot\n",
+    QEMU_ARCH_ALL)
+STEXI
+@item -savevm-on-reboot @var{file}
+@findex -savevm-on-reboot
+Save state on machine reboot
+ETEXI

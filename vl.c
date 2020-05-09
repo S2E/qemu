@@ -186,6 +186,8 @@ uint8_t *boot_splash_filedata;
 size_t boot_splash_filedata_size;
 uint8_t qemu_extra_params_fw[2];
 
+const char *savevm_on_reboot = NULL;
+
 int icount_align_option;
 
 const char *periodic_screenshot = NULL;
@@ -1837,9 +1839,20 @@ static bool main_loop_should_exit(void)
         pause_all_vcpus();
         qemu_system_reset(request);
         resume_all_vcpus();
+
         if (!runstate_check(RUN_STATE_RUNNING) &&
                 !runstate_check(RUN_STATE_INMIGRATE)) {
             runstate_set(RUN_STATE_PRELAUNCH);
+        }
+
+        if (savevm_on_reboot) {
+            Error *err = NULL;
+            printf("Saving VM (%s)!\n", savevm_on_reboot);
+            save_snapshot(savevm_on_reboot, &err);
+            if (err) {
+                error_report_err(err);
+            }
+            return true;
         }
     }
     if (qemu_wakeup_requested()) {
@@ -3663,6 +3676,9 @@ int main(int argc, char **argv, char **envp)
                 break;
             case QEMU_OPTION_loadvm:
                 loadvm = optarg;
+                break;
+            case QEMU_OPTION_savevm_on_reboot:
+                savevm_on_reboot = optarg;
                 break;
             case QEMU_OPTION_periodic_screenshot:
                 periodic_screenshot = optarg;
