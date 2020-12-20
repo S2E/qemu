@@ -155,6 +155,10 @@ static bool kvm_dev_snapshot;
 static bool kvm_has_clock_scale;
 #endif
 
+#ifdef KVM_CAP_UPCALLS
+static bool kvm_has_upcalls;
+#endif
+
 bool kvm_has_dbt;
 
 
@@ -1686,6 +1690,41 @@ int kvm_has_dbt(void) {
 
 #endif
 
+#ifdef KVM_CAP_UPCALLS
+void qmp_screendump(const char *filename, bool has_device, const char *device,
+                    bool has_head, int64_t head, Error **errp);
+
+static QEMUTimer *s_screendump_timer;
+static void kvm_screendump_timer(void *opaque)
+{
+    const char *filename = opaque;
+    Error *err = NULL;
+    qmp_screendump(filename, false, NULL, false, 0, &err);
+    if (err)  {
+        error_report_err(err);
+    }
+    free(opaque);
+    timer_free(s_screendump_timer);
+    s_screendump_timer = NULL;
+}
+
+// qmp_screendump can't be called synchronously, it messes up the display.
+static int kvm_upcall_screendump(const char *filename) {
+    if (s_screendump_timer) {
+        return -EAGAIN;
+    }
+
+    char *fn = strdup(filename);
+    if (!fn) {
+        return -ENOMEM;
+    }
+
+    s_screendump_timer = timer_new(QEMU_CLOCK_HOST, 1, kvm_screendump_timer, fn);
+    timer_mod(s_screendump_timer, qemu_clock_get_ms(QEMU_CLOCK_HOST));
+    return 0;
+}
+#endif
+
 static int kvm_init(MachineState *ms)
 {
     MachineClass *mc = MACHINE_GET_CLASS(ms);
@@ -1900,6 +1939,16 @@ static int kvm_init(MachineState *ms)
     kvm_has_clock_scale = kvm_check_extension(s, KVM_CAP_CPU_CLOCK_SCALE);
     if (kvm_has_clock_scale) {
         kvm_vm_ioctl(s, KVM_SET_CLOCK_SCALE, cpu_get_clock_scale_ptr());
+    }
+#endif
+
+#ifdef KVM_CAP_UPCALLS
+    kvm_has_upcalls = kvm_check_extension(s, KVM_CAP_UPCALLS);
+    if (kvm_has_upcalls) {
+        struct kvm_dev_upcalls upcalls;
+        upcalls.screendump = &kvm_upcall_screendump;
+
+        kvm_ioctl(s, KVM_REGISTER_UPCALLS, &upcalls);
     }
 #endif
 
