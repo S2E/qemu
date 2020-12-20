@@ -982,6 +982,10 @@ struct kvm_ppc_resize_hpt {
 /* Indicates that the KVM provided uses DBT instead of actual KVM */
 #define KVM_CAP_DBT 259
 
+/* Indicates presence of upcalls mechanisms where the KVM engine
+   can invoke hypervisor's entry points */
+#define KVM_CAP_UPCALLS 260
+
 /****************************************/
 
 #ifdef KVM_CAP_IRQ_ROUTING
@@ -1475,6 +1479,12 @@ struct kvm_dev_snapshot {
 /* Available with KVM_CAP_CPU_CLOCK_SCALE */
 #define KVM_SET_CLOCK_SCALE _IOWR(KVMIO, 0xf8, unsigned*)
 
+struct kvm_dev_upcalls {
+    int (*screendump)(const char *filename);
+};
+
+/* Available with KVM_CAP_UPCALLS */
+#define KVM_REGISTER_UPCALLS _IOWR(KVMIO, 0xf9, unsigned *)
 
 /* Secure Encrypted Virtualization command */
 enum sev_cmd_id {
