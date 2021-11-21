@@ -349,7 +349,7 @@ static int64_t cpu_get_clock_locked(void)
         /* Compute how much real time elapsed since last request */
         int64_t cur_clock = get_clock() + timers_state.cpu_clock_offset;
         int64_t increment = cur_clock - timers_state.cpu_clock_prev;
-        assert(increment > 0);
+        assert(increment >= 0);
 
         /* Slow the clock down according to the scale */
         int64_t result = timers_state.cpu_clock_prev_scaled + increment / timers_state.cpu_clock_scale_factor;
