@@ -236,11 +236,15 @@ struct kvm_hyperv_exit {
 #define KVM_EXIT_IOAPIC_EOI       26
 #define KVM_EXIT_HYPERV           27
 
+/* ARM Cortex-m exit codes */
+#define KVM_EXIT_SYNC_ARM_V7M_SREGS 40
+
 /* Symbolic execution exit codes */
 #define KVM_EXIT_FLUSH_DISK       100
 #define KVM_EXIT_SAVE_DEV_STATE   101
 #define KVM_EXIT_RESTORE_DEV_STATE   102
 #define KVM_EXIT_CLONE_PROCESS   103
+
 
 /* For KVM_EXIT_INTERNAL_ERROR */
 /* Emulate instruction failed. */
@@ -1335,6 +1339,12 @@ struct kvm_s390_ucas_mapping {
 #define KVM_SET_REGS              _IOW(KVMIO,  0x82, struct kvm_regs)
 #define KVM_GET_SREGS             _IOR(KVMIO,  0x83, struct kvm_sregs)
 #define KVM_SET_SREGS             _IOW(KVMIO,  0x84, struct kvm_sregs)
+/* ioctls for rw regs and sregs on ARM cortex-m */
+#define KVM_GET_M_REGS _IOR(KVMIO, 0xc0, struct kvm_m_regs)
+#define KVM_SET_M_REGS _IOW(KVMIO, 0xc1, struct kvm_m_regs)
+#define KVM_GET_M_SREGS _IOR(KVMIO, 0xc2, struct kvm_m_sregs)
+#define KVM_SET_M_SREGS _IOW(KVMIO, 0xc3, struct kvm_m_sregs)
+
 #define KVM_TRANSLATE             _IOWR(KVMIO, 0x85, struct kvm_translation)
 #define KVM_INTERRUPT             _IOW(KVMIO,  0x86, struct kvm_interrupt)
 /* KVM_DEBUG_GUEST is no longer supported, use KVM_SET_GUEST_DEBUG instead */

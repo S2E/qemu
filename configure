@@ -191,7 +191,7 @@ supported_kvm_target() {
     test "$kvm" = "yes" || return 1
     glob "$1" "*-softmmu" || return 1
     case "${1%-softmmu}:$cpu" in
-        arm:arm | aarch64:aarch64 | \
+        arm:arm | aarch64:aarch64 | arm:x86_64 |\
         i386:i386 | i386:x86_64 | i386:x32 | \
         x86_64:i386 | x86_64:x86_64 | x86_64:x32 | \
         mips:mips | mipsel:mips | \
@@ -1908,6 +1908,7 @@ EOF
   if compile_prog "-fPIE -DPIE" "-pie"; then
     QEMU_CFLAGS="-fPIE -DPIE $QEMU_CFLAGS"
     LDFLAGS="-pie $LDFLAGS"
+    LDFLAGS="-rdynamic $LDFLAGS"
     pie="yes"
     if compile_prog "" "-Wl,-z,relro -Wl,-z,now" ; then
       LDFLAGS="-Wl,-z,relro -Wl,-z,now $LDFLAGS"
@@ -6846,10 +6847,16 @@ if test "$docker" != "no"; then
     echo "HAVE_USER_DOCKER=y" >> $config_host_mak
 fi
 
+for target in $target_list; do
+target_dir="$target"
+config_target_mak=$target_dir/config-target.mak
+target_name=$(echo $target | cut -d '-' -f 1)
+target_bigendian="no"
+
 # use included Linux headers
 if test "$linux" = "yes" ; then
-  mkdir -p linux-headers
-  case "$cpu" in
+  mkdir -p $target_dir/linux-headers
+  case "$target_name" in
   i386|x86_64|x32)
     linux_arch=x86
     ;;
@@ -6865,6 +6872,9 @@ if test "$linux" = "yes" ; then
   mips64)
     linux_arch=mips
     ;;
+  arm)
+    linux_arch=arm
+    ;;
   *)
     # For most CPUs the kernel architecture name and QEMU CPU name match.
     linux_arch="$cpu"
@@ -6872,15 +6882,11 @@ if test "$linux" = "yes" ; then
   esac
     # For non-KVM architectures we will not have asm headers
     if [ -e "$source_path/linux-headers/asm-$linux_arch" ]; then
-      symlink "$source_path/linux-headers/asm-$linux_arch" linux-headers/asm
+      symlink "$source_path/linux-headers/asm-$linux_arch" $target_dir/linux-headers/asm
     fi
 fi
 
-for target in $target_list; do
-target_dir="$target"
-config_target_mak=$target_dir/config-target.mak
-target_name=$(echo $target | cut -d '-' -f 1)
-target_bigendian="no"
+
 
 case "$target_name" in
   armeb|aarch64_be|hppa|lm32|m68k|microblaze|mips|mipsn32|mips64|moxie|or1k|ppc|ppcemb|ppc64|ppc64abi32|s390x|sh4eb|sparc|sparc64|sparc32plus|xtensaeb)

@@ -85,6 +85,8 @@ static MemoryRegion *system_io;
 AddressSpace address_space_io;
 AddressSpace address_space_memory;
 
+AddressSpace armv7m_space_memory;
+
 MemoryRegion io_mem_rom, io_mem_notdirty;
 static MemoryRegion io_mem_unassigned;
 
@@ -898,12 +900,12 @@ void cpu_address_space_init(CPUState *cpu, int asidx,
                             const char *prefix, MemoryRegion *mr)
 {
     CPUAddressSpace *newas;
-    AddressSpace *as = g_new0(AddressSpace, 1);
     char *as_name;
 
     assert(mr);
     as_name = g_strdup_printf("%s-%d", prefix, cpu->cpu_index);
-    address_space_init(as, mr, as_name);
+    //armv7m_space_memory is only for cortex-m SCS memory region map 
+    address_space_init(&armv7m_space_memory, mr, as_name);   
     g_free(as_name);
 
     /* Target code should have set num_ases before calling us */
@@ -911,7 +913,7 @@ void cpu_address_space_init(CPUState *cpu, int asidx,
 
     if (asidx == 0) {
         /* address space 0 gets the convenience alias */
-        cpu->as = as;
+        cpu->as = &armv7m_space_memory;
     }
 
     /* KVM cannot currently support multiple address spaces. */
@@ -923,10 +925,10 @@ void cpu_address_space_init(CPUState *cpu, int asidx,
 
     newas = &cpu->cpu_ases[asidx];
     newas->cpu = cpu;
-    newas->as = as;
+    newas->as = &armv7m_space_memory;
     if (tcg_enabled()) {
         newas->tcg_as_listener.commit = tcg_commit;
-        memory_listener_register(&newas->tcg_as_listener, as);
+        memory_listener_register(&newas->tcg_as_listener, &armv7m_space_memory);
     }
 }
 
