@@ -4395,9 +4395,10 @@ clock_adjtime=no
 cat > $TMPC <<EOF
 #include <time.h>
 
+struct timex tx;
 int main(void)
 {
-    return clock_adjtime(0, 0);
+    return clock_adjtime(0, &tx);
 }
 EOF
 clock_adjtime=no
@@ -4493,9 +4494,10 @@ fi
 cat > $TMPC <<EOF
 #include <signal.h>
 #include <time.h>
+struct timespec ts;
 int main(void) {
   timer_create(CLOCK_REALTIME, NULL, NULL);
-  return clock_gettime(CLOCK_REALTIME, NULL);
+  return clock_gettime(CLOCK_REALTIME, &ts);
 }
 EOF
 
