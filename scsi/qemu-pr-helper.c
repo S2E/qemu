@@ -547,7 +547,8 @@ static int multipath_pr_out(int fd, const uint8_t *cdb, uint8_t *sense,
                 scsi_build_sense(sense, SENSE_CODE(INVALID_PARAM));
                 return CHECK_CONDITION;
             }
-
+            #pragma GCC diagnostic push
+            #pragma GCC diagnostic ignored "-Warray-bounds"
             paramp.trnptid_list[paramp.num_transportid++] = id;
         }
     }
