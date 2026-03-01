@@ -34,6 +34,7 @@ block_ss.add(files(
   'quorum.c',
   'raw-format.c',
   'reqlist.c',
+  's2e.c',
   'snapshot.c',
   'snapshot-access.c',
   'throttle.c',
