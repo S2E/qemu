@@ -106,6 +106,11 @@ bool kvm_pre_fault_memory_supported;
 static bool kvm_has_guest_debug;
 static int kvm_sstep_flags;
 static bool kvm_immediate_exit;
+
+#ifdef KVM_CAP_FORCE_EXIT
+static bool kvm_force_exit;
+#endif
+
 static uint64_t kvm_supported_memory_attributes;
 static bool kvm_guest_memfd_supported;
 static hwaddr kvm_max_slot_size = ~0;
@@ -2666,6 +2671,11 @@ static int kvm_init(AccelState *as, MachineState *ms)
     }
 
     kvm_immediate_exit = kvm_check_extension(s, KVM_CAP_IMMEDIATE_EXIT);
+
+#ifdef KVM_CAP_FORCE_EXIT
+    kvm_force_exit = kvm_check_extension(s, KVM_CAP_FORCE_EXIT);
+#endif
+
     s->nr_slots_max = kvm_check_extension(s, KVM_CAP_NR_MEMSLOTS);
 
     /* If unspecified, use the default value */
@@ -3012,6 +3022,17 @@ static __thread bool have_sigbus_pending;
 static void kvm_cpu_kick(CPUState *cpu)
 {
     qatomic_set(&cpu->kvm_run->immediate_exit, 1);
+
+
+    /**
+     * For user-space KVM implementations that cannot exit immediately
+     * when potential interrupts (signals) are pending.
+     */
+#ifdef KVM_CAP_FORCE_EXIT
+    if (kvm_force_exit) {
+        kvm_vm_ioctl(kvm_state, KVM_FORCE_EXIT, NULL);
+    }
+#endif
 }
 
 static void kvm_cpu_kick_self(void)

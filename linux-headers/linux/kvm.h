@@ -956,6 +956,8 @@ struct kvm_enable_cap {
 #define KVM_CAP_ARM_CACHEABLE_PFNMAP_SUPPORTED 243
 #define KVM_CAP_GUEST_MEMFD_FLAGS 244
 
+#define KVM_CAP_FORCE_EXIT 255
+
 struct kvm_irq_routing_irqchip {
 	__u32 irqchip;
 	__u32 pin;
@@ -1601,6 +1603,8 @@ struct kvm_create_guest_memfd {
 };
 
 #define KVM_PRE_FAULT_MEMORY	_IOWR(KVMIO, 0xd5, struct kvm_pre_fault_memory)
+
+#define KVM_FORCE_EXIT            _IO(KVMIO,  0xf4)
 
 struct kvm_pre_fault_memory {
 	__u64 gpa;
