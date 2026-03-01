@@ -42,6 +42,7 @@
 #include "hw/loader.h"
 #include "qemu/error-report.h"
 #include "qemu/range.h"
+#include "system/kvm.h"
 #include "trace.h"
 #include "hw/pci/msi.h"
 #include "hw/pci/msix.h"
@@ -2603,6 +2604,8 @@ static void pci_add_option_rom(PCIDevice *pdev, bool is_default_rom,
 
     if (load_file) {
         void *ptr = memory_region_get_ram_ptr(&pdev->rom);
+
+        kvm_register_fixed_memory_region(name, (uint64_t) ptr, pdev->romsize, 1);
 
         if (load_image_size(path, ptr, size) < 0) {
             error_setg(errp, "failed to load romfile \"%s\"", pdev->romfile);

@@ -1067,6 +1067,9 @@ void x86_bios_rom_init(X86MachineState *x86ms, const char *default_firmware,
         x86_firmware_configure(0x100000000ULL - bios_size, ptr, bios_size);
     } else {
         memory_region_set_readonly(&x86ms->bios, !isapc_ram_fw);
+
+        kvm_register_fixed_memory_region("pc.bios", (uintptr_t) memory_region_get_ram_ptr(&x86ms->bios), bios_size, 1);
+
         ret = rom_add_file_fixed(bios_name, (uint32_t)(-bios_size), -1);
         if (ret != 0) {
             goto bios_error;

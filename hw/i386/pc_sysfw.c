@@ -74,6 +74,9 @@ static void pc_isa_bios_init(PCMachineState *pcms, MemoryRegion *isa_bios,
     if (!machine_require_guest_memfd(current_machine)) {
         memory_region_set_readonly(isa_bios, true);
     }
+
+    kvm_register_fixed_memory_region("isa-bios", (uintptr_t) isa_bios_ptr, isa_bios_size, 1);
+    kvm_register_fixed_memory_region("flash-bios", (uintptr_t) flash_ptr, flash_size, 1);
 }
 
 static PFlashCFI01 *pc_pflash_create(PCMachineState *pcms,

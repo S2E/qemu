@@ -891,6 +891,10 @@ void pc_memory_init(PCMachineState *pcms,
                              0, x86ms->below_4g_mem_size);
     memory_region_add_subregion(system_memory, 0, ram_below_4g);
     e820_add_entry(0, x86ms->below_4g_mem_size, E820_RAM);
+
+    kvm_register_fixed_memory_region("pc.ram", (uintptr_t)memory_region_get_ram_ptr(machine->ram),
+                                     x86ms->below_4g_mem_size + x86ms->above_4g_mem_size, 0);
+
     if (x86ms->above_4g_mem_size > 0) {
         ram_above_4g = g_malloc(sizeof(*ram_above_4g));
         memory_region_init_alias(ram_above_4g, NULL, "ram-above-4g",
@@ -972,6 +976,9 @@ void pc_memory_init(PCMachineState *pcms,
                 memory_region_set_readonly(option_rom_mr, true);
             }
         }
+        kvm_register_fixed_memory_region("pc.rom", (uintptr_t) memory_region_get_ram_ptr(option_rom_mr),
+                                         PC_ROM_SIZE, 1);
+
         memory_region_add_subregion_overlap(rom_memory,
                                             PC_ROM_MIN_VGA,
                                             option_rom_mr,

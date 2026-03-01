@@ -958,6 +958,9 @@ struct kvm_enable_cap {
 
 #define KVM_CAP_FORCE_EXIT 255
 
+/* Indicates presence of fixed memory region support */
+#define KVM_CAP_MEM_FIXED_REGION 256
+
 struct kvm_irq_routing_irqchip {
 	__u32 irqchip;
 	__u32 pin;
@@ -1605,6 +1608,16 @@ struct kvm_create_guest_memfd {
 #define KVM_PRE_FAULT_MEMORY	_IOWR(KVMIO, 0xd5, struct kvm_pre_fault_memory)
 
 #define KVM_FORCE_EXIT            _IO(KVMIO,  0xf4)
+
+/* Available with KVM_CAP_MEM_FIXED_REGION */
+struct kvm_fixed_region {
+    #define KVM_MEM_SHARED_CONCRETE 1
+    const char *name;
+    __u64 host_address;
+    __u64 size;
+    __u32 flags;
+};
+#define KVM_MEM_REGISTER_FIXED_REGION   _IOW(KVMIO,  0xf5, struct kvm_fixed_region)
 
 struct kvm_pre_fault_memory {
 	__u64 gpa;

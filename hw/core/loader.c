@@ -57,6 +57,7 @@
 #include "monitor/monitor.h"
 #include "system/reset.h"
 #include "system/system.h"
+#include "system/kvm.h"
 #include "uboot_image.h"
 #include "hw/loader.h"
 #include "hw/nvram/fw_cfg.h"
@@ -1047,6 +1048,15 @@ static void *rom_set_mr(Rom *rom, Object *owner, const char *name, bool ro)
     if (!cpr_is_incoming()) {
         memcpy(data, rom->data, rom->datasize);
     }
+
+
+    uint64_t sz = memory_region_size(rom->mr);
+    if (sz & 0xfff) {
+        sz += 0x1000;
+        sz &= ~0xfff;
+    }
+
+    kvm_register_fixed_memory_region(name, (uintptr_t) data, sz, 1);
 
     return data;
 }
