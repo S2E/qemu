@@ -196,6 +196,7 @@ static const char *qtest_log;
 
 const char *periodic_screenshot = NULL;
 static QEMUTimer *s_screenshot_timer;
+bool serial_commands_enabled = false;
 
 static int has_defaults = 1;
 static int default_audio = 1;
@@ -3430,6 +3431,9 @@ void qemu_init(int argc, char **argv)
                 break;
             case QEMU_OPTION_periodic_screenshot:
                 periodic_screenshot = optarg;
+                break;
+            case QEMU_OPTION_serial_commands:
+                serial_commands_enabled = true;
                 break;
             case QEMU_OPTION_full_screen:
                 dpy.has_full_screen = true;
