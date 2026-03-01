@@ -3924,6 +3924,8 @@ void qemu_init(int argc, char **argv)
     }
     resume_mux_open();
 
+    qemu_initialize_savevm_timer();
+
     if (periodic_screenshot) {
         s_screenshot_timer = timer_new(QEMU_CLOCK_HOST, 1,
                                        screenshot_timer_handler, NULL);
