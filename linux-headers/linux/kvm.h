@@ -961,6 +961,8 @@ struct kvm_enable_cap {
 /* Indicates presence of fixed memory region support */
 #define KVM_CAP_MEM_FIXED_REGION 256
 
+#define KVM_CAP_MEM_RW 1021
+
 struct kvm_irq_routing_irqchip {
 	__u32 irqchip;
 	__u32 pin;
@@ -1618,6 +1620,16 @@ struct kvm_fixed_region {
     __u32 flags;
 };
 #define KVM_MEM_REGISTER_FIXED_REGION   _IOW(KVMIO,  0xf5, struct kvm_fixed_region)
+
+/* Available with KVM_CAP_MEM_RW */
+struct kvm_mem_rw {
+    /* source and dest are always host pointers */
+    __u64 source;
+    __u64 dest;
+    __u64 is_write;
+    __u64 length;
+};
+#define KVM_MEM_RW		  _IOW(KVMIO,  0xf3, struct kvm_mem_rw)
 
 struct kvm_pre_fault_memory {
 	__u64 gpa;

@@ -4408,12 +4408,33 @@ static int ram_load_precopy(QEMUFile *f)
                 ret = -EINVAL;
                 break;
             }
-            ram_handle_zero(host, TARGET_PAGE_SIZE);
+            if (kvm_enabled() && kvm_has_mem_rw()) {
+                uint8_t *buffer = g_malloc0(TARGET_PAGE_SIZE);
+                if (kvm_mem_rw(host, buffer, TARGET_PAGE_SIZE, 1) < 0) {
+                    g_free(buffer);
+                    ret = -EINVAL;
+                    break;
+                }
+                g_free(buffer);
+            } else {
+                ram_handle_zero(host, TARGET_PAGE_SIZE);
+            }
             break;
 
-        case RAM_SAVE_FLAG_PAGE:
-            qemu_get_buffer(f, host, TARGET_PAGE_SIZE);
-            break;
+        case RAM_SAVE_FLAG_PAGE: {
+            if (kvm_enabled() && kvm_has_mem_rw()) {
+                uint8_t *buffer = g_malloc(TARGET_PAGE_SIZE);
+                qemu_get_buffer(f, buffer, TARGET_PAGE_SIZE);
+                if (kvm_mem_rw(host, buffer, TARGET_PAGE_SIZE, 1) < 0) {
+                    g_free(buffer);
+                    ret = -EINVAL;
+                    break;
+                }
+                g_free(buffer);
+            } else {
+                qemu_get_buffer(f, host, TARGET_PAGE_SIZE);
+            }
+        } break;
 
         case RAM_SAVE_FLAG_XBZRLE:
             if (load_xbzrle(f, addr, host) < 0) {

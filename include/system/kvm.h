@@ -162,6 +162,8 @@ extern bool kvm_pre_fault_memory_supported;
 #endif  /* CONFIG_KVM_IS_POSSIBLE */
 
 int kvm_register_fixed_memory_region(const char *name, uintptr_t start, uint64_t size, int shared_concrete);
+int kvm_mem_rw(void *dest, const void *source, uint64_t size, int is_write);
+int kvm_has_mem_rw(void);
 
 struct kvm_run;
 struct kvm_irq_routing_entry;

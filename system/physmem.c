@@ -3278,7 +3278,9 @@ static MemTxResult flatview_write_continue_step(MemTxAttrs attrs,
         uint8_t *ram_ptr = qemu_ram_ptr_length(mr->ram_block, mr_addr, l,
                                                false, true);
 
-        memmove(ram_ptr, buf, *l);
+        if (!kvm_enabled() ||  kvm_mem_rw(ram_ptr, buf, *l, 1) < 0) {
+            memmove(ram_ptr, buf, *l);
+        }
         invalidate_and_set_dirty(mr, mr_addr, *l);
 
         return MEMTX_OK;
@@ -3371,7 +3373,9 @@ static MemTxResult flatview_read_continue_step(MemTxAttrs attrs, uint8_t *buf,
         uint8_t *ram_ptr = qemu_ram_ptr_length(mr->ram_block, mr_addr, l,
                                                false, false);
 
-        memcpy(buf, ram_ptr, *l);
+        if (!kvm_enabled() ||  kvm_mem_rw(buf, ram_ptr, *l, 0) < 0) {
+            memcpy(buf, ram_ptr, *l);
+        }
 
         return MEMTX_OK;
     }
@@ -3510,7 +3514,10 @@ MemTxResult address_space_write_rom(AddressSpace *as, hwaddr addr,
         } else {
             /* ROM/RAM case */
             void *ram_ptr = qemu_map_ram_ptr(mr->ram_block, addr1);
-            memcpy(ram_ptr, buf, l);
+            if (!kvm_enabled() ||  kvm_mem_rw(ram_ptr, buf, l, 1) < 0) {
+                memcpy(ram_ptr, buf, l);
+            }
+
             invalidate_and_set_dirty(mr, addr1, l);
         }
         len -= l;
@@ -3563,6 +3570,37 @@ typedef struct {
     size_t len;
     uint8_t buffer[];
 } BounceBuffer;
+
+/**
+ * Block devices may split big requests in chunks of 4K,
+ * each of them requiring one buffer.
+ */
+static unsigned s_max_bounce_buffers = 0;
+static BounceBuffer **s_bounce_buffers = NULL;
+
+static BounceBuffer* bounce_buffer_alloc(size_t size)
+{
+    int i;
+    for (i = 0; i < s_max_bounce_buffers; ++i) {
+        if (!s_bounce_buffers[i]) {
+            s_bounce_buffers[i] = g_malloc0(sizeof(BounceBuffer) + size);
+            s_bounce_buffers[i]->magic = BOUNCE_BUFFER_MAGIC;
+            return s_bounce_buffers[i];
+        }
+    }
+
+    /* Did not find any bounce buffer, allocate some more. */
+    unsigned old_count = s_max_bounce_buffers;
+    s_max_bounce_buffers += 32;
+    s_bounce_buffers = g_renew(BounceBuffer*, s_bounce_buffers,
+                               s_max_bounce_buffers);
+    memset(s_bounce_buffers + old_count, 0,
+           (s_max_bounce_buffers - old_count) * sizeof(BounceBuffer*));
+    s_bounce_buffers[old_count] = g_malloc0(sizeof(BounceBuffer) + size);
+    s_bounce_buffers[old_count]->magic = BOUNCE_BUFFER_MAGIC;
+    return s_bounce_buffers[old_count];
+}
+
 
 static void
 address_space_unregister_map_client_do(AddressSpaceMapClient *client)
@@ -3725,6 +3763,18 @@ void *address_space_map(AddressSpace *as,
         return NULL;
     }
 
+    if (kvm_has_mem_rw()) {
+        BounceBuffer *bounce = bounce_buffer_alloc(*plen);
+
+        bounce->addr = addr;
+        bounce->len = *plen;
+        if (!is_write) {
+            cpu_physical_memory_read(addr, bounce->buffer, *plen);
+        }
+
+        return bounce->buffer;
+    }
+
     l = len;
     RCU_READ_LOCK_GUARD();
     fv = address_space_to_flatview(as);
@@ -3781,6 +3831,25 @@ void address_space_unmap(AddressSpace *as, void *buffer, hwaddr len,
 {
     MemoryRegion *mr;
     ram_addr_t addr1;
+
+    if (kvm_has_mem_rw()) {
+        /* Look for KVM bounce buffers */
+        for (int i = 0; i < s_max_bounce_buffers; ++i) {
+            if (s_bounce_buffers[i] &&
+                s_bounce_buffers[i]->buffer == buffer) {
+                if (is_write) {
+                    address_space_write(as, s_bounce_buffers[i]->addr,
+                                        MEMTXATTRS_UNSPECIFIED,
+                                        s_bounce_buffers[i]->buffer,
+                                        access_len);
+                }
+                g_free(s_bounce_buffers[i]);
+                s_bounce_buffers[i] = NULL;
+                address_space_notify_map_clients(as);
+                return;
+            }
+        }
+    }
 
     mr = memory_region_from_host(buffer, &addr1);
     if (mr != NULL) {
