@@ -41,6 +41,9 @@
 #include <CoreFoundation/CoreFoundation.h>
 #endif
 
+extern const char *periodic_screenshot;
+extern void take_screenshot(void);
+
 static void *qemu_default_main(void *opaque)
 {
     int status;
@@ -48,6 +51,11 @@ static void *qemu_default_main(void *opaque)
     replay_mutex_lock();
     bql_lock();
     status = qemu_main_loop();
+
+    if (periodic_screenshot) {
+        take_screenshot();
+    }
+
     qemu_cleanup(status);
     bql_unlock();
     replay_mutex_unlock();

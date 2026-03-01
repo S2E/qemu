@@ -69,6 +69,7 @@
 #include "monitor/monitor.h"
 #include "ui/console.h"
 #include "ui/input.h"
+#include "qemu/coroutine-core.h"
 #include "system/system.h"
 #include "system/numa.h"
 #include "system/hostmem.h"
@@ -192,6 +193,9 @@ static const char *log_file;
 static bool list_data_dirs;
 static const char *qtest_chrdev;
 static const char *qtest_log;
+
+const char *periodic_screenshot = NULL;
+static QEMUTimer *s_screenshot_timer;
 
 static int has_defaults = 1;
 static int default_audio = 1;
@@ -2840,6 +2844,67 @@ void qmp_x_exit_preconfig(Error **errp)
     }
 }
 
+void take_screenshot(void);
+
+static void coroutine_fn take_screenshot_co(void *opaque)
+{
+    static int count = 0;
+    static bool isdir = false;
+    Error *err = NULL;
+
+    if (count == 0) {
+        /* Initialize screenshot */
+        DIR *dir = opendir(periodic_screenshot);
+        if (dir) {
+            isdir = true;
+            closedir(dir);
+        } else {
+            if (!strstr(periodic_screenshot, ".png")) {
+                /* Directory is not ready yet, wait for next time */
+                return;
+            }
+        }
+    }
+
+    const char *actual_name;
+
+    if (isdir) {
+        char filename[512];
+        snprintf(filename, sizeof(filename) - 1, "%s/%d.png",
+                 periodic_screenshot, count++);
+        actual_name = filename;
+    } else {
+        actual_name = periodic_screenshot;
+        count++;
+    }
+
+    ImageFormat format;
+
+    format = qapi_enum_parse(&ImageFormat_lookup, "png", IMAGE_FORMAT_PNG, &err);
+    if (err) {
+        goto end;
+    }
+
+    qmp_screendump(actual_name, NULL, false, 0, true, format, &err);
+end:
+    if (err) {
+        error_report_err(err);
+    }
+}
+
+void take_screenshot(void)
+{
+    Coroutine *co = qemu_coroutine_create(take_screenshot_co, NULL);
+    qemu_coroutine_enter(co);
+}
+
+static void screenshot_timer_handler(void *opaque)
+{
+    take_screenshot();
+    timer_mod(s_screenshot_timer,
+              (qemu_clock_get_ms(QEMU_CLOCK_HOST) + 5000) * 1000000);
+}
+
 void qemu_init(int argc, char **argv)
 {
     QemuOpts *opts;
@@ -3363,6 +3428,9 @@ void qemu_init(int argc, char **argv)
             case QEMU_OPTION_loadvm:
                 loadvm = optarg;
                 break;
+            case QEMU_OPTION_periodic_screenshot:
+                periodic_screenshot = optarg;
+                break;
             case QEMU_OPTION_full_screen:
                 dpy.has_full_screen = true;
                 dpy.full_screen = true;
@@ -3855,4 +3923,11 @@ void qemu_init(int argc, char **argv)
         os_setup_post();
     }
     resume_mux_open();
+
+    if (periodic_screenshot) {
+        s_screenshot_timer = timer_new(QEMU_CLOCK_HOST, 1,
+                                       screenshot_timer_handler, NULL);
+        timer_mod(s_screenshot_timer,
+                  qemu_clock_get_ms(QEMU_CLOCK_HOST) + 1000);
+    }
 }
