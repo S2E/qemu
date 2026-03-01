@@ -142,7 +142,7 @@ void configure_rtc(QemuOpts *opts)
     const char *value;
 
     /* Set defaults */
-    rtc_clock = QEMU_CLOCK_HOST;
+    rtc_clock = QEMU_CLOCK_VIRTUAL;
     rtc_ref_start_datetime = qemu_clock_get_ms(QEMU_CLOCK_HOST) / 1000;
     rtc_realtime_clock_offset = qemu_clock_get_ms(QEMU_CLOCK_REALTIME) / 1000;
 
