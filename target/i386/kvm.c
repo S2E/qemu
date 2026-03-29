@@ -3088,6 +3088,7 @@ void kvm_arch_pre_run(CPUState *cpu, struct kvm_run *run)
 
         DPRINTF("setting tpr\n");
         run->cr8 = cpu_get_apic_tpr(x86_cpu->apic_state);
+        run->apic_base = cpu_get_apic_base(x86_cpu->apic_state);
 
         qemu_mutex_unlock_iothread();
     }
