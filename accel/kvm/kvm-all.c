@@ -44,6 +44,8 @@
 
 #include "hw/boards.h"
 
+#include "kvm_arm.h"
+
 /* This check must be after config-host.h is included */
 #ifdef CONFIG_EVENTFD
 #include <sys/eventfd.h>
@@ -2314,12 +2316,23 @@ int kvm_cpu_exec(CPUState *cpu)
             break;
         case KVM_EXIT_MMIO:
             DPRINTF("handle_mmio\n");
-            /* Called outside BQL */
-            address_space_rw(&address_space_memory,
-                             run->mmio.phys_addr, attrs,
-                             run->mmio.data,
-                             run->mmio.len,
-                             run->mmio.is_write);
+            qemu_mutex_lock_iothread();
+            /* SCS region in armv7m space memory */
+            if (run->mmio.phys_addr > 0xe0000000) {
+                address_space_rw(&armv7m_space_memory,
+                                 run->mmio.phys_addr, attrs,
+                                 run->mmio.data,
+                                 run->mmio.len,
+                                 run->mmio.is_write);
+            }
+            else {
+                address_space_rw(&address_space_memory,
+                                 run->mmio.phys_addr, attrs,
+                                 run->mmio.data,
+                                 run->mmio.len,
+                                 run->mmio.is_write);
+            }
+            qemu_mutex_unlock_iothread();
             ret = 0;
             break;
         case KVM_EXIT_IRQ_WINDOW_OPEN:
@@ -2382,6 +2395,12 @@ int kvm_cpu_exec(CPUState *cpu)
         case KVM_EXIT_CLONE_PROCESS:
             qemu_mutex_lock_iothread();
             kvm_clone_process(cpu);
+            qemu_mutex_unlock_iothread();
+            ret = 0;
+            break;
+        case KVM_EXIT_SYNC_ARM_V7M_SREGS:
+            qemu_mutex_lock_iothread();
+            kvm_cortex_m_get_regs(cpu);
             qemu_mutex_unlock_iothread();
             ret = 0;
             break;
@@ -2868,15 +2887,17 @@ bool kvm_device_supported(int vmfd, uint64_t type)
         return false;
     }
 
+
     return (ioctl(vmfd, KVM_CREATE_DEVICE, &create_dev) >= 0);
 }
-
+ 
 int kvm_set_one_reg(CPUState *cs, uint64_t id, void *source)
 {
     struct kvm_one_reg reg;
     int r;
 
     reg.id = id;
+
     reg.addr = (uintptr_t) source;
     r = kvm_vcpu_ioctl(cs, KVM_SET_ONE_REG, &reg);
     if (r) {

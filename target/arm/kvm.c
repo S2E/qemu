@@ -37,6 +37,48 @@ static bool cap_has_mp_state;
 
 static ARMHostCPUFeatures arm_host_cpu_features;
 
+int kvm_cortex_m_vcpu_init(CPUState *cs) 
+{
+    ARMCPU *cpu = ARM_CPU(cs);
+    CPUARMState *env = &cpu->env;
+
+    struct kvm_m_regs regs;
+    struct kvm_m_sregs sregs;
+
+    memcpy(regs.regs,env->regs,sizeof(regs.regs));
+    sregs.thumb = env->thumb;
+    sregs.vecbase = env->v7m.vecbase[0];
+    sregs.other_sp = env->v7m.other_sp;
+    sregs.basepri = env->v7m.basepri[0];
+    sregs.control = env->v7m.control[0];
+    sregs.exception = env->v7m.exception;
+    sregs.nvic = env->nvic;
+
+    kvm_vcpu_ioctl(cs, KVM_SET_M_REGS, &regs);  
+    kvm_vcpu_ioctl(cs, KVM_SET_M_SREGS, &sregs);
+    return 0;
+}
+
+int kvm_cortex_m_get_regs(CPUState *cs)
+{
+    ARMCPU *cpu = ARM_CPU(cs);
+    CPUARMState *env=&cpu->env;
+
+    struct kvm_m_regs regs;
+    struct kvm_m_sregs sregs;
+
+    kvm_vcpu_ioctl(cs, KVM_GET_M_REGS, &regs);
+    kvm_vcpu_ioctl(cs, KVM_GET_M_SREGS, &sregs);
+    memcpy(env->regs,regs.regs,sizeof(regs.regs));
+
+    env->v7m.vecbase[0] = sregs.vecbase;
+    env->v7m.other_sp = sregs.other_sp;
+    env->v7m.basepri[0] = sregs.basepri;
+    env->v7m.control[0] = sregs.control;
+    env->v7m.exception = sregs.exception;
+    return 0;
+}
+
 int kvm_arm_vcpu_init(CPUState *cs)
 {
     ARMCPU *cpu = ARM_CPU(cs);
@@ -470,14 +512,20 @@ void kvm_arm_reset_vcpu(ARMCPU *cpu)
     /* Re-init VCPU so that all registers are set to
      * their respective reset values.
      */
-    ret = kvm_arm_vcpu_init(CPU(cpu));
-    if (ret < 0) {
-        fprintf(stderr, "kvm_arm_vcpu_init failed: %s\n", strerror(-ret));
-        abort();
+    if (arm_feature(&cpu->env, ARM_FEATURE_M)){
+        ret = kvm_cortex_m_vcpu_init(CPU(cpu));
     }
-    if (!write_kvmstate_to_list(cpu)) {
-        fprintf(stderr, "write_kvmstate_to_list failed\n");
-        abort();
+    else {
+        ret = kvm_arm_vcpu_init(CPU(cpu));
+        if (ret < 0) {
+            fprintf(stderr, "kvm_arm_vcpu_init failed: %s\n", strerror(-ret));
+            abort();
+        }
+        if (!write_kvmstate_to_list(cpu)) {
+            fprintf(stderr, "write_kvmstate_to_list failed\n");
+            abort();
+        }
+    
     }
 }
 

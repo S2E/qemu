@@ -3397,7 +3397,9 @@ static const int tcg_target_callee_save_regs[] = {
 #define PUSH_SIZE \
     ((1 + ARRAY_SIZE(tcg_target_callee_save_regs)) \
      * (TCG_TARGET_REG_BITS / 8))
-
+#ifdef FRAME_SIZE
+    #undef FRAME_SIZE
+#endif /* endif FRAME_SIZE*/
 #define FRAME_SIZE \
     ((PUSH_SIZE \
       + TCG_STATIC_CALL_ARGS_SIZE \

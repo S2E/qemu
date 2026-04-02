@@ -106,7 +106,21 @@ struct kvm_vcpu_init {
 	__u32 target;
 	__u32 features[7];
 };
+struct kvm_m_regs {
+	__u32 regs[16];
+};
 
+struct kvm_m_sregs {
+	__u32 other_sp;
+	__u32 vecbase;
+	__u32 basepri;
+	__u32 control;
+    int current_sp;
+    int exception;
+    int pending_exception;
+    __u32 thumb;
+    void *nvic;
+};
 struct kvm_sregs {
 };
 

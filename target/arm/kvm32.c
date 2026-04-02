@@ -173,51 +173,58 @@ int kvm_arch_init_vcpu(CPUState *cs)
     struct kvm_one_reg r;
     ARMCPU *cpu = ARM_CPU(cs);
 
-    if (cpu->kvm_target == QEMU_KVM_ARM_TARGET_NONE) {
-        fprintf(stderr, "KVM is not supported for this guest CPU type\n");
-        return -EINVAL;
+    if (arm_feature(&cpu->env, ARM_FEATURE_M)) {
+        return kvm_cortex_m_vcpu_init(cs);
     }
+    else {
+        if (cpu->kvm_target == QEMU_KVM_ARM_TARGET_NONE) {
+            fprintf(stderr, "KVM is not supported for this guest CPU type\n");
+            return -EINVAL;
+        }
 
-    /* Determine init features for this CPU */
-    memset(cpu->kvm_init_features, 0, sizeof(cpu->kvm_init_features));
-    if (cpu->start_powered_off) {
-        cpu->kvm_init_features[0] |= 1 << KVM_ARM_VCPU_POWER_OFF;
-    }
-    if (kvm_check_extension(cs->kvm_state, KVM_CAP_ARM_PSCI_0_2)) {
-        cpu->psci_version = 2;
-        cpu->kvm_init_features[0] |= 1 << KVM_ARM_VCPU_PSCI_0_2;
-    }
+        /* Determine init features for this CPU */
+        memset(cpu->kvm_init_features, 0, sizeof(cpu->kvm_init_features));
+        if (cpu->start_powered_off) {
+            cpu->kvm_init_features[0] |= 1 << KVM_ARM_VCPU_POWER_OFF;
+        }
+        if (kvm_check_extension(cs->kvm_state, KVM_CAP_ARM_PSCI_0_2)) {
+            cpu->psci_version = 2;
+            cpu->kvm_init_features[0] |= 1 << KVM_ARM_VCPU_PSCI_0_2;
+        }
 
-    /* Do KVM_ARM_VCPU_INIT ioctl */
-    ret = kvm_arm_vcpu_init(cs);
-    if (ret) {
-        return ret;
-    }
+        /* Do KVM_ARM_VCPU_INIT ioctl */
+        ret = kvm_arm_vcpu_init(cs);
+        if (ret) {
+            return ret;
+        }
 
-    /* Query the kernel to make sure it supports 32 VFP
-     * registers: QEMU's "cortex-a15" CPU is always a
-     * VFP-D32 core. The simplest way to do this is just
-     * to attempt to read register d31.
-     */
-    r.id = KVM_REG_ARM | KVM_REG_SIZE_U64 | KVM_REG_ARM_VFP | 31;
-    r.addr = (uintptr_t)(&v);
-    ret = kvm_vcpu_ioctl(cs, KVM_GET_ONE_REG, &r);
-    if (ret == -ENOENT) {
-        return -EINVAL;
-    }
+        /* Query the kernel to make sure it supports 32 VFP
+         * registers: QEMU's "cortex-a15" CPU is always a
+         * VFP-D32 core. The simplest way to do this is just
+         * to attempt to read register d31.
+         */
+        r.id = KVM_REG_ARM | KVM_REG_SIZE_U64 | KVM_REG_ARM_VFP | 31;
+        r.addr = (uintptr_t)(&v);
+        ret = kvm_vcpu_ioctl(cs, KVM_GET_ONE_REG, &r);
+        if (ret == -ENOENT) {
+            return -EINVAL;
+        }
 
-    /*
-     * When KVM is in use, PSCI is emulated in-kernel and not by qemu.
-     * Currently KVM has its own idea about MPIDR assignment, so we
-     * override our defaults with what we get from KVM.
-     */
-    ret = kvm_get_one_reg(cs, ARM_CP15_REG32(ARM_CPU_ID_MPIDR), &mpidr);
-    if (ret) {
-        return ret;
-    }
-    cpu->mp_affinity = mpidr & ARM32_AFFINITY_MASK;
+        /*
+         * When KVM is in use, PSCI is emulated in-kernel and not by qemu.
+         * Currently KVM has its own idea about MPIDR assignment, so we
+         * override our defaults with what we get from KVM.
+         */
+        ret = kvm_get_one_reg(cs, ARM_CP15_REG32(ARM_CPU_ID_MPIDR), &mpidr);
+        if (ret) {
+            return ret;
+        }
+        cpu->mp_affinity = mpidr & ARM32_AFFINITY_MASK;
 
-    return kvm_arm_init_cpreg_list(cpu);
+        return kvm_arm_init_cpreg_list(cpu);
+        
+    }
+    return -1;
 }
 
 typedef struct Reg {
@@ -306,83 +313,87 @@ int kvm_arch_put_registers(CPUState *cs, int level)
     int ret, i;
     uint32_t cpsr, fpscr;
 
-    /* Make sure the banked regs are properly set */
-    mode = env->uncached_cpsr & CPSR_M;
-    bn = bank_number(mode);
-    if (mode == ARM_CPU_MODE_FIQ) {
-        memcpy(env->fiq_regs, env->regs + 8, 5 * sizeof(uint32_t));
+    if (arm_feature(&cpu->env, ARM_FEATURE_M)) {
+        return kvm_cortex_m_vcpu_init(cs);
     } else {
-        memcpy(env->usr_regs, env->regs + 8, 5 * sizeof(uint32_t));
-    }
-    env->banked_r13[bn] = env->regs[13];
-    env->banked_r14[bn] = env->regs[14];
-    env->banked_spsr[bn] = env->spsr;
+        /* Make sure the banked regs are properly set */
+        mode = env->uncached_cpsr & CPSR_M;
+        bn = bank_number(mode);
+        if (mode == ARM_CPU_MODE_FIQ) {
+            memcpy(env->fiq_regs, env->regs + 8, 5 * sizeof(uint32_t));
+        } else {
+            memcpy(env->usr_regs, env->regs + 8, 5 * sizeof(uint32_t));
+        }
+        env->banked_r13[bn] = env->regs[13];
+        env->banked_r14[bn] = env->regs[14];
+        env->banked_spsr[bn] = env->spsr;
 
-    /* Now we can safely copy stuff down to the kernel */
-    for (i = 0; i < ARRAY_SIZE(regs); i++) {
-        r.id = regs[i].id;
-        r.addr = (uintptr_t)(env) + regs[i].offset;
+        /* Now we can safely copy stuff down to the kernel */
+        for (i = 0; i < ARRAY_SIZE(regs); i++) {
+            r.id = regs[i].id;
+            r.addr = (uintptr_t)(env) + regs[i].offset;
+            ret = kvm_vcpu_ioctl(cs, KVM_SET_ONE_REG, &r);
+            if (ret) {
+                return ret;
+            }
+        }
+
+        /* Special cases which aren't a single CPUARMState field */
+        cpsr = cpsr_read(env);
+        r.id = KVM_REG_ARM | KVM_REG_SIZE_U32 |
+            KVM_REG_ARM_CORE | KVM_REG_ARM_CORE_REG(usr_regs.ARM_cpsr);
+        r.addr = (uintptr_t)(&cpsr);
         ret = kvm_vcpu_ioctl(cs, KVM_SET_ONE_REG, &r);
         if (ret) {
             return ret;
         }
-    }
 
-    /* Special cases which aren't a single CPUARMState field */
-    cpsr = cpsr_read(env);
-    r.id = KVM_REG_ARM | KVM_REG_SIZE_U32 |
-        KVM_REG_ARM_CORE | KVM_REG_ARM_CORE_REG(usr_regs.ARM_cpsr);
-    r.addr = (uintptr_t)(&cpsr);
-    ret = kvm_vcpu_ioctl(cs, KVM_SET_ONE_REG, &r);
-    if (ret) {
-        return ret;
-    }
+        /* VFP registers */
+        r.id = KVM_REG_ARM | KVM_REG_SIZE_U64 | KVM_REG_ARM_VFP;
+        for (i = 0; i < 32; i++) {
+            r.addr = (uintptr_t)aa32_vfp_dreg(env, i);
+            ret = kvm_vcpu_ioctl(cs, KVM_SET_ONE_REG, &r);
+            if (ret) {
+                return ret;
+            }
+            r.id++;
+        }
 
-    /* VFP registers */
-    r.id = KVM_REG_ARM | KVM_REG_SIZE_U64 | KVM_REG_ARM_VFP;
-    for (i = 0; i < 32; i++) {
-        r.addr = (uintptr_t)aa32_vfp_dreg(env, i);
+        r.id = KVM_REG_ARM | KVM_REG_SIZE_U32 | KVM_REG_ARM_VFP |
+            KVM_REG_ARM_VFP_FPSCR;
+        fpscr = vfp_get_fpscr(env);
+        r.addr = (uintptr_t)&fpscr;
         ret = kvm_vcpu_ioctl(cs, KVM_SET_ONE_REG, &r);
         if (ret) {
             return ret;
         }
-        r.id++;
-    }
 
-    r.id = KVM_REG_ARM | KVM_REG_SIZE_U32 | KVM_REG_ARM_VFP |
-        KVM_REG_ARM_VFP_FPSCR;
-    fpscr = vfp_get_fpscr(env);
-    r.addr = (uintptr_t)&fpscr;
-    ret = kvm_vcpu_ioctl(cs, KVM_SET_ONE_REG, &r);
-    if (ret) {
+        /* Note that we do not call write_cpustate_to_list()
+         * here, so we are only writing the tuple list back to
+         * KVM. This is safe because nothing can change the
+         * CPUARMState cp15 fields (in particular gdb accesses cannot)
+         * and so there are no changes to sync. In fact syncing would
+         * be wrong at this point: for a constant register where TCG and
+         * KVM disagree about its value, the preceding write_list_to_cpustate()
+         * would not have had any effect on the CPUARMState value (since the
+         * register is read-only), and a write_cpustate_to_list() here would
+         * then try to write the TCG value back into KVM -- this would either
+         * fail or incorrectly change the value the guest sees.
+         *
+         * If we ever want to allow the user to modify cp15 registers via
+         * the gdb stub, we would need to be more clever here (for instance
+         * tracking the set of registers kvm_arch_get_registers() successfully
+         * managed to update the CPUARMState with, and only allowing those
+         * to be written back up into the kernel).
+         */
+        if (!write_list_to_kvmstate(cpu, level)) {
+            return EINVAL;
+        }
+
+        kvm_arm_sync_mpstate_to_kvm(cpu);
+
         return ret;
-    }
-
-    /* Note that we do not call write_cpustate_to_list()
-     * here, so we are only writing the tuple list back to
-     * KVM. This is safe because nothing can change the
-     * CPUARMState cp15 fields (in particular gdb accesses cannot)
-     * and so there are no changes to sync. In fact syncing would
-     * be wrong at this point: for a constant register where TCG and
-     * KVM disagree about its value, the preceding write_list_to_cpustate()
-     * would not have had any effect on the CPUARMState value (since the
-     * register is read-only), and a write_cpustate_to_list() here would
-     * then try to write the TCG value back into KVM -- this would either
-     * fail or incorrectly change the value the guest sees.
-     *
-     * If we ever want to allow the user to modify cp15 registers via
-     * the gdb stub, we would need to be more clever here (for instance
-     * tracking the set of registers kvm_arch_get_registers() successfully
-     * managed to update the CPUARMState with, and only allowing those
-     * to be written back up into the kernel).
-     */
-    if (!write_list_to_kvmstate(cpu, level)) {
-        return EINVAL;
-    }
-
-    kvm_arm_sync_mpstate_to_kvm(cpu);
-
-    return ret;
+    }    
 }
 
 int kvm_arch_get_registers(CPUState *cs)
@@ -394,68 +405,73 @@ int kvm_arch_get_registers(CPUState *cs)
     int ret, i;
     uint32_t cpsr, fpscr;
 
-    for (i = 0; i < ARRAY_SIZE(regs); i++) {
-        r.id = regs[i].id;
-        r.addr = (uintptr_t)(env) + regs[i].offset;
-        ret = kvm_vcpu_ioctl(cs, KVM_GET_ONE_REG, &r);
-        if (ret) {
-            return ret;
-        }
-    }
-
-    /* Special cases which aren't a single CPUARMState field */
-    r.id = KVM_REG_ARM | KVM_REG_SIZE_U32 |
-        KVM_REG_ARM_CORE | KVM_REG_ARM_CORE_REG(usr_regs.ARM_cpsr);
-    r.addr = (uintptr_t)(&cpsr);
-    ret = kvm_vcpu_ioctl(cs, KVM_GET_ONE_REG, &r);
-    if (ret) {
-        return ret;
-    }
-    cpsr_write(env, cpsr, 0xffffffff, CPSRWriteRaw);
-
-    /* Make sure the current mode regs are properly set */
-    mode = env->uncached_cpsr & CPSR_M;
-    bn = bank_number(mode);
-    if (mode == ARM_CPU_MODE_FIQ) {
-        memcpy(env->regs + 8, env->fiq_regs, 5 * sizeof(uint32_t));
+    if (arm_feature(&cpu->env, ARM_FEATURE_M)) {
+        return kvm_cortex_m_get_regs(cs);
     } else {
-        memcpy(env->regs + 8, env->usr_regs, 5 * sizeof(uint32_t));
-    }
-    env->regs[13] = env->banked_r13[bn];
-    env->regs[14] = env->banked_r14[bn];
-    env->spsr = env->banked_spsr[bn];
+        for (i = 0; i < ARRAY_SIZE(regs); i++) {
+            r.id = regs[i].id;
+            r.addr = (uintptr_t)(env) + regs[i].offset;
+            ret = kvm_vcpu_ioctl(cs, KVM_GET_ONE_REG, &r);
+            if (ret) {
+                return ret;
+            }
+        }
 
-    /* VFP registers */
-    r.id = KVM_REG_ARM | KVM_REG_SIZE_U64 | KVM_REG_ARM_VFP;
-    for (i = 0; i < 32; i++) {
-        r.addr = (uintptr_t)aa32_vfp_dreg(env, i);
+        /* Special cases which aren't a single CPUARMState field */
+        r.id = KVM_REG_ARM | KVM_REG_SIZE_U32 |
+            KVM_REG_ARM_CORE | KVM_REG_ARM_CORE_REG(usr_regs.ARM_cpsr);
+        r.addr = (uintptr_t)(&cpsr);
         ret = kvm_vcpu_ioctl(cs, KVM_GET_ONE_REG, &r);
         if (ret) {
             return ret;
         }
-        r.id++;
+        cpsr_write(env, cpsr, 0xffffffff, CPSRWriteRaw);
+
+        /* Make sure the current mode regs are properly set */
+        mode = env->uncached_cpsr & CPSR_M;
+        bn = bank_number(mode);
+        if (mode == ARM_CPU_MODE_FIQ) {
+            memcpy(env->regs + 8, env->fiq_regs, 5 * sizeof(uint32_t));
+        } else {
+            memcpy(env->regs + 8, env->usr_regs, 5 * sizeof(uint32_t));
+        }
+        env->regs[13] = env->banked_r13[bn];
+        env->regs[14] = env->banked_r14[bn];
+        env->spsr = env->banked_spsr[bn];
+
+        /* VFP registers */
+        r.id = KVM_REG_ARM | KVM_REG_SIZE_U64 | KVM_REG_ARM_VFP;
+        for (i = 0; i < 32; i++) {
+            r.addr = (uintptr_t)aa32_vfp_dreg(env, i);
+            ret = kvm_vcpu_ioctl(cs, KVM_GET_ONE_REG, &r);
+            if (ret) {
+                return ret;
+            }
+            r.id++;
+        }
+
+        r.id = KVM_REG_ARM | KVM_REG_SIZE_U32 | KVM_REG_ARM_VFP |
+            KVM_REG_ARM_VFP_FPSCR;
+        r.addr = (uintptr_t)&fpscr;
+        ret = kvm_vcpu_ioctl(cs, KVM_GET_ONE_REG, &r);
+        if (ret) {
+            return ret;
+        }
+        vfp_set_fpscr(env, fpscr);
+
+        if (!write_kvmstate_to_list(cpu)) {
+            return EINVAL;
+        }
+
+        /* Note that it's OK to have registers which aren't in CPUState,
+        * so we can ignore a failure return here.
+        */
+        write_list_to_cpustate(cpu);
+
+        kvm_arm_sync_mpstate_to_qemu(cpu);
+
+        return 0;
     }
-
-    r.id = KVM_REG_ARM | KVM_REG_SIZE_U32 | KVM_REG_ARM_VFP |
-        KVM_REG_ARM_VFP_FPSCR;
-    r.addr = (uintptr_t)&fpscr;
-    ret = kvm_vcpu_ioctl(cs, KVM_GET_ONE_REG, &r);
-    if (ret) {
-        return ret;
-    }
-    vfp_set_fpscr(env, fpscr);
-
-    if (!write_kvmstate_to_list(cpu)) {
-        return EINVAL;
-    }
-    /* Note that it's OK to have registers which aren't in CPUState,
-     * so we can ignore a failure return here.
-     */
-    write_list_to_cpustate(cpu);
-
-    kvm_arm_sync_mpstate_to_qemu(cpu);
-
-    return 0;
 }
 
 int kvm_arch_insert_sw_breakpoint(CPUState *cs, struct kvm_sw_breakpoint *bp)

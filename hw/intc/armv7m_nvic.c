@@ -363,7 +363,6 @@ static inline int nvic_exec_prio(NVICState *s)
     if (env->v7m.faultmask[M_REG_S]) {
         running = (env->v7m.aircr & R_V7M_AIRCR_BFHFNMINS_MASK) ? -3 : -1;
     }
-
     /* consider priority of active handler */
     return MIN(running, s->exception_prio);
 }
@@ -400,8 +399,9 @@ bool armv7m_nvic_neg_prio_requested(void *opaque, bool secure)
 bool armv7m_nvic_can_take_pending_exception(void *opaque)
 {
     NVICState *s = opaque;
-
-    return nvic_exec_prio(s) > nvic_pending_prio(s);
+    const int running = nvic_exec_prio(s);
+    const int vectpending_prio = s->vectpending_prio;
+    return  running > vectpending_prio;
 }
 
 int armv7m_nvic_raw_execution_priority(void *opaque)
@@ -657,7 +657,7 @@ void armv7m_nvic_set_pending_derived(void *opaque, int irq, bool secure)
 void armv7m_nvic_acknowledge_irq(void *opaque)
 {
     NVICState *s = (NVICState *)opaque;
-    CPUARMState *env = &s->cpu->env;
+    /* CPUARMState *env = &s->cpu->env; */
     const int pending = s->vectpending;
     const int running = nvic_exec_prio(s);
     VecInfo *vec;
@@ -672,7 +672,8 @@ void armv7m_nvic_acknowledge_irq(void *opaque)
 
     assert(vec->enabled);
     assert(vec->pending);
-
+   // printf("check vectpending_prio=0x%x\n",s->vectpending_prio);
+   // printf("check running=0x%x\n",running);
     assert(s->vectpending_prio < running);
 
     trace_nvic_acknowledge_irq(pending, s->vectpending_prio);
@@ -680,7 +681,9 @@ void armv7m_nvic_acknowledge_irq(void *opaque)
     vec->active = 1;
     vec->pending = 0;
 
-    write_v7m_exception(env, s->vectpending);
+    /*IoT s2e move to do_interrupt_v7m comment this function*/
+    /* write_v7m_exception(env, s->vectpending); */
+
 
     nvic_irq_update(s);
 }

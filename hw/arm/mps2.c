@@ -37,6 +37,7 @@
 #include "hw/misc/mps2-scc.h"
 #include "hw/devices.h"
 #include "net/net.h"
+#include "sysemu/kvm.h"
 
 typedef enum MPS2FPGAType {
     FPGA_AN385,
@@ -147,6 +148,8 @@ static void mps2_common_init(MachineState *machine)
                                          NULL, "mps.ram", 0x1000000);
     memory_region_add_subregion(system_memory, 0x21000000, &mms->psram);
 
+    kvm_register_fixed_memory_region("mps.ram", (uintptr_t) memory_region_get_ram_ptr(&mms->psram),0x1000000, 0);
+
     switch (mmc->fpga_type) {
     case FPGA_AN385:
         make_ram(&mms->ssram1, "mps.ssram1", 0x0, 0x400000);
@@ -164,9 +167,13 @@ static void mps2_common_init(MachineState *machine)
         break;
     case FPGA_AN511:
         make_ram(&mms->blockram, "mps.blockram", 0x0, 0x40000);
+        kvm_register_fixed_memory_region("mps.blockram", (uintptr_t) memory_region_get_ram_ptr(&mms->blockram),0x40000, 1);
         make_ram(&mms->ssram1, "mps.ssram1", 0x00400000, 0x00800000);
+        kvm_register_fixed_memory_region("mps.ssram1", (uintptr_t) memory_region_get_ram_ptr(&mms->ssram1),0x00800000, 1);
         make_ram(&mms->sram, "mps.sram", 0x20000000, 0x20000);
+        kvm_register_fixed_memory_region("mps.sram", (uintptr_t) memory_region_get_ram_ptr(&mms->sram),0x20000, 0);
         make_ram(&mms->ssram23, "mps.ssram23", 0x20400000, 0x400000);
+        kvm_register_fixed_memory_region("mps.ssram23", (uintptr_t) memory_region_get_ram_ptr(&mms->ssram23),0x400000, 0);
         break;
     default:
         g_assert_not_reached();

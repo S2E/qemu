@@ -770,7 +770,6 @@ distclean: clean
 	rm -f qemu-doc.log qemu-doc.pdf qemu-doc.pg qemu-doc.toc qemu-doc.tp
 	rm -f qemu-doc.vr qemu-doc.txt
 	rm -f config.log
-	rm -f linux-headers/asm
 	rm -f docs/version.texi
 	rm -f docs/interop/qemu-ga-qapi.texi docs/interop/qemu-qmp-qapi.texi
 	rm -f docs/interop/qemu-qmp-ref.7 docs/interop/qemu-ga-ref.7
