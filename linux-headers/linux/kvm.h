@@ -963,6 +963,9 @@ struct kvm_enable_cap {
 
 #define KVM_CAP_MEM_RW 1021
 
+/* Indicates that the KVM provided uses DBT instead of actual KVM */
+#define KVM_CAP_DBT 259
+
 struct kvm_irq_routing_irqchip {
 	__u32 irqchip;
 	__u32 pin;
