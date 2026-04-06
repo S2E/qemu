@@ -981,6 +981,10 @@ struct kvm_enable_cap {
 /* Indicates that the KVM provided uses DBT instead of actual KVM */
 #define KVM_CAP_DBT 259
 
+/* Indicates presence of upcalls mechanisms where the KVM engine
+   can invoke hypervisor's entry points */
+#define KVM_CAP_UPCALLS 260
+
 struct kvm_irq_routing_irqchip {
 	__u32 irqchip;
 	__u32 pin;
@@ -1675,6 +1679,12 @@ struct kvm_dev_snapshot {
 /* Available with KVM_CAP_CPU_CLOCK_SCALE */
 #define KVM_SET_CLOCK_SCALE _IOWR(KVMIO, 0xf8, unsigned*)
 
+struct kvm_dev_upcalls {
+    int (*screendump)(const char *filename);
+};
+
+/* Available with KVM_CAP_UPCALLS */
+#define KVM_REGISTER_UPCALLS _IOWR(KVMIO, 0xf9, unsigned *)
 
 struct kvm_pre_fault_memory {
 	__u64 gpa;

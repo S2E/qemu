@@ -45,6 +45,7 @@
 #include "trace.h"
 #include "hw/irq.h"
 #include "qapi/visitor.h"
+#include "ui/console.h"
 #include "qapi/qapi-types-common.h"
 #include "qapi/qapi-visit-common.h"
 #include "system/reset.h"
@@ -135,6 +136,10 @@ static bool kvm_dev_snapshot;
 
 #ifdef KVM_CAP_CPU_CLOCK_SCALE
 static bool kvm_has_clock_scale;
+#endif
+
+#ifdef KVM_CAP_UPCALLS
+static bool kvm_has_upcalls;
 #endif
 
 static uint64_t kvm_supported_memory_attributes;
@@ -2819,6 +2824,58 @@ int kvm_has_dbt(void) {
 
 #endif
 
+#ifdef KVM_CAP_UPCALLS
+void coroutine_fn qmp_screendump(const char *filename, const char *device,
+                                 bool has_head, int64_t head,
+                                 bool has_format, ImageFormat format,
+                                 Error **errp);
+
+static QEMUTimer *s_screendump_timer;
+
+static void kvm_screendump_co(void *opaque) {
+    const char *filename = opaque;
+    Error *err = NULL;
+    ImageFormat format;
+
+    format = qapi_enum_parse(&ImageFormat_lookup, "png", IMAGE_FORMAT_PNG, &err);
+    if (err) {
+        goto end;
+    }
+
+    qmp_screendump(filename, NULL, false, 0, true, format, &err);
+end:
+    if (err)  {
+        error_report_err(err);
+    }
+
+    free(opaque);
+}
+
+static void kvm_screendump_timer(void *opaque)
+{
+    Coroutine *co = qemu_coroutine_create(kvm_screendump_co, opaque);
+    qemu_coroutine_enter(co);
+    timer_free(s_screendump_timer);
+    s_screendump_timer = NULL;
+}
+
+// qmp_screendump can't be called synchronously, it messes up the display.
+static int kvm_upcall_screendump(const char *filename) {
+    if (s_screendump_timer) {
+        return -EAGAIN;
+    }
+
+    char *fn = strdup(filename);
+    if (!fn) {
+        return -ENOMEM;
+    }
+
+    s_screendump_timer = timer_new(QEMU_CLOCK_HOST, 1, kvm_screendump_timer, fn);
+    timer_mod(s_screendump_timer, qemu_clock_get_ms(QEMU_CLOCK_HOST));
+    return 0;
+}
+#endif
+
 static int kvm_init(AccelState *as, MachineState *ms)
 {
     MachineClass *mc = MACHINE_GET_CLASS(ms);
@@ -2920,6 +2977,16 @@ static int kvm_init(AccelState *as, MachineState *ms)
     // expected by virtual devices (especially VAPIC), so this flag
     // lets these devices to take into account the different behavior.
     kvm_has_dbt = kvm_check_extension(s, KVM_CAP_DBT);
+#endif
+
+#ifdef KVM_CAP_UPCALLS
+    kvm_has_upcalls = kvm_check_extension(s, KVM_CAP_UPCALLS);
+    if (kvm_has_upcalls) {
+        struct kvm_dev_upcalls upcalls;
+        upcalls.screendump = &kvm_upcall_screendump;
+
+        kvm_ioctl(s, KVM_REGISTER_UPCALLS, &upcalls);
+    }
 #endif
 
     s->nr_slots_max = kvm_check_extension(s, KVM_CAP_NR_MEMSLOTS);
