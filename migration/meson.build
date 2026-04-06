@@ -6,6 +6,7 @@ migration_files = files(
   'vmstate-types.c',
   'vmstate.c',
   'qemu-file.c',
+  'qemu-memfile.c',
   'yank_functions.c',
 )
 
