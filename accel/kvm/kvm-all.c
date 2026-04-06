@@ -55,6 +55,11 @@
 
 #include "hw/boards.h"
 #include "system/stats.h"
+#include "migration/qemu-memfile.h"
+#include "migration/migration.h"
+#include "migration/savevm.h"
+#include "migration/vmstate.h"
+#include "block/block-global-state.h"
 
 /* This check must be after config-host.h is included */
 #ifdef CONFIG_EVENTFD
@@ -121,6 +126,10 @@ static bool kvm_has_mem_rw_flag;
 
 #ifdef KVM_CAP_DISK_RW
 static bool kvm_has_disk_rw_flag;
+#endif
+
+#ifdef KVM_CAP_DEV_SNAPSHOT
+static bool kvm_dev_snapshot;
 #endif
 
 static uint64_t kvm_supported_memory_attributes;
@@ -2599,6 +2608,90 @@ int kvm_disk_rw(void *buffer, uint64_t sector, int count, int is_write)
 #endif
 
 
+#ifdef KVM_CAP_DEV_SNAPSHOT
+
+static int kvm_dev_save_snapshot(void)
+{
+    static bool unregistered = false;
+    int ret = -1;
+    struct kvm_dev_snapshot s;
+    size_t ssize;
+    Error *err = NULL;
+    QEMUFile *f = qemu_memfile_open();
+
+    if (kvm_dev_snapshot && !unregistered) {
+        vmstate_unregister_blacklisted_devices();
+        unregistered = true;
+    }
+
+    if (qemu_savevm_state(f, &err) < 0) {
+        if (err) {
+            error_report_err(err);
+            abort();
+        }
+    }
+
+    s.buffer = (uint64_t) qemu_file_get_internal_storage(f, &ssize);
+    if (!s.buffer) {
+        fprintf(stderr, "could not get internal storage\n");
+        abort();
+    }
+    s.size = (uint32_t) ssize;
+
+    s.is_write = 1;
+
+    ret = kvm_vm_ioctl(kvm_state, KVM_DEV_SNAPSHOT, &s);
+
+    if (ret < 0) {
+        fprintf(stderr, "Could not save device snapshot\n");
+        abort();
+    }
+
+    qemu_fclose(f);
+    return ret;
+}
+
+static int kvm_dev_restore_snapshot_cb(void *buffer, size_t pos, size_t size)
+{
+    struct kvm_dev_snapshot s;
+    s.buffer = (uintptr_t) buffer;
+    s.size = size;
+    s.is_write = 0;
+    s.pos = pos;
+
+    return kvm_vm_ioctl(kvm_state, KVM_DEV_SNAPSHOT, &s);
+}
+
+static int kvm_dev_restore_snapshot(void)
+{
+    QEMUFile *f = qemu_memfile_open_ro(kvm_dev_restore_snapshot_cb);
+    if (!f) {
+        return -1;
+    }
+
+    Error *err = NULL;
+    int ret = qemu_loadvm_state(f, &err);
+    qemu_loadvm_state_cleanup(migration_incoming_get_current());
+    if (ret < 0) {
+        error_report_err(err);
+        abort();
+    }
+
+    qemu_fclose(f);
+    return 0;
+}
+#else
+static int kvm_dev_save_snapshot(void)
+{
+    return -1;
+}
+
+static int kvm_dev_restore_snapshot(void)
+{
+    return -1;
+}
+#endif
+
 bool kvm_dirty_ring_enabled(void)
 {
     return kvm_state && kvm_state->kvm_dirty_ring_size;
@@ -2795,6 +2888,10 @@ static int kvm_init(AccelState *as, MachineState *ms)
 
 #ifdef KVM_CAP_DISK_RW
     kvm_has_disk_rw_flag = kvm_check_extension(s, KVM_CAP_DISK_RW);
+#endif
+
+#ifdef KVM_CAP_DEV_SNAPSHOT
+    kvm_dev_snapshot = kvm_check_extension(s, KVM_CAP_DEV_SNAPSHOT);
 #endif
 
 #ifdef KVM_CAP_DBT
@@ -3474,6 +3571,26 @@ int kvm_cpu_exec(CPUState *cpu)
             }
             ret = kvm_convert_memory(run->memory_fault.gpa, run->memory_fault.size,
                                      run->memory_fault.flags & KVM_MEMORY_EXIT_FLAG_PRIVATE);
+            break;
+        case KVM_EXIT_FLUSH_DISK:
+            bql_lock();
+            bdrv_drain_all_begin();
+            bdrv_flush_all();
+            bdrv_drain_all_end();
+            bql_unlock();
+            ret = 0;
+            break;
+        case KVM_EXIT_SAVE_DEV_STATE:
+            bql_lock();
+            kvm_dev_save_snapshot();
+            bql_unlock();
+            ret = 0;
+            break;
+        case KVM_EXIT_RESTORE_DEV_STATE:
+            bql_lock();
+            kvm_dev_restore_snapshot();
+            bql_unlock();
+            ret = 0;
             break;
         default:
             ret = kvm_arch_handle_exit(cpu, run);

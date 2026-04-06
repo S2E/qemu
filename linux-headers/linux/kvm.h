@@ -166,6 +166,11 @@ struct kvm_xen_exit {
 #define KVM_EXIT_S390_STSI        25
 #define KVM_EXIT_IOAPIC_EOI       26
 #define KVM_EXIT_HYPERV           27
+
+/* Symbolic execution exit codes */
+#define KVM_EXIT_FLUSH_DISK       100
+#define KVM_EXIT_SAVE_DEV_STATE   101
+#define KVM_EXIT_RESTORE_DEV_STATE   102
 #define KVM_EXIT_ARM_NISV         28
 #define KVM_EXIT_X86_RDMSR        29
 #define KVM_EXIT_X86_WRMSR        30
@@ -966,6 +971,9 @@ struct kvm_enable_cap {
 /* Indicates presence of in-kvm disk support */
 #define KVM_CAP_DISK_RW 257
 
+/* Indicates presence of device snapshots */
+#define KVM_CAP_DEV_SNAPSHOT 258
+
 /* Indicates that the KVM provided uses DBT instead of actual KVM */
 #define KVM_CAP_DBT 259
 
@@ -1648,6 +1656,17 @@ struct kvm_disk_rw {
     __u8 is_write;
 };
 #define KVM_DISK_RW   _IOWR(KVMIO,  0xf6, struct kvm_disk_rw)
+
+/* Available with KVM_CAP_DEV_SNAPSHOT */
+struct kvm_dev_snapshot {
+    __u64 buffer;
+    /* If is_write == 0, indicates expected size in case of error */
+    __u32 size;
+    /* Only when is_write == 0, indicates the position from which reading the state */
+    __u32 pos;
+    __u8 is_write;
+};
+#define KVM_DEV_SNAPSHOT   _IOWR(KVMIO,  0xf7, struct kvm_dev_snapshot)
 
 struct kvm_pre_fault_memory {
 	__u64 gpa;
