@@ -963,6 +963,9 @@ struct kvm_enable_cap {
 
 #define KVM_CAP_MEM_RW 1021
 
+/* Indicates presence of in-kvm disk support */
+#define KVM_CAP_DISK_RW 257
+
 /* Indicates that the KVM provided uses DBT instead of actual KVM */
 #define KVM_CAP_DBT 259
 
@@ -1633,6 +1636,18 @@ struct kvm_mem_rw {
     __u64 length;
 };
 #define KVM_MEM_RW		  _IOW(KVMIO,  0xf3, struct kvm_mem_rw)
+
+/* Available with KVM_CAP_DISK_RW */
+struct kvm_disk_rw {
+    /* Address of the buffer in host memory */
+    __u64 host_address;
+    /* 512-byte sectors */
+    __u64 sector;
+    /* input: sectors to read/write, output: sectors read/written */
+    __u32 count;
+    __u8 is_write;
+};
+#define KVM_DISK_RW   _IOWR(KVMIO,  0xf6, struct kvm_disk_rw)
 
 struct kvm_pre_fault_memory {
 	__u64 gpa;
