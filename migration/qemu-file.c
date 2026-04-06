@@ -32,6 +32,7 @@
 #include "options.h"
 #include "qapi/error.h"
 #include "rdma.h"
+#include "io/channel-buffer.h"
 #include "io/channel-file.h"
 
 #define IO_BUF_SIZE 32768
@@ -304,6 +305,19 @@ int qemu_fflush(QEMUFile *f)
     f->buf_index = 0;
     f->iovcnt = 0;
     return f->last_error;
+}
+
+void *qemu_file_get_internal_storage(QEMUFile *f, size_t *size)
+{
+    QIOChannelBuffer *bioc = QIO_CHANNEL_BUFFER(
+        object_dynamic_cast(OBJECT(f->ioc), TYPE_QIO_CHANNEL_BUFFER));
+
+    if (bioc) {
+        *size = bioc->usage;
+        return bioc->data;
+    }
+
+    return NULL;
 }
 
 /*
