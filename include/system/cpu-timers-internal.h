@@ -46,6 +46,11 @@ typedef struct TimersState {
     /* Icount delta used for shift auto adjust. */
     int64_t last_delta;
 
+    /* slow down vm clock by a factor x */
+    int32_t cpu_clock_scale_factor;
+    int64_t cpu_clock_prev;
+    int64_t cpu_clock_prev_scaled;
+
     /* Compensate for varying guest execution speed.  */
     aligned_int64_t qemu_icount_bias;
 

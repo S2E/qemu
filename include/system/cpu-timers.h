@@ -36,6 +36,8 @@ int64_t cpu_get_ticks(void);
  */
 int64_t cpu_get_clock(void);
 
+int32_t *cpu_get_clock_scale_ptr(void);
+
 void qemu_timer_notify_cb(void *opaque, QEMUClockType type);
 
 /* get/set VIRTUAL clock and VM elapsed ticks via the cpus accel interface */

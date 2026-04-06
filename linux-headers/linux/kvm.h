@@ -966,7 +966,11 @@ struct kvm_enable_cap {
 /* Indicates presence of fixed memory region support */
 #define KVM_CAP_MEM_FIXED_REGION 256
 
+/* Indicates presence of notifications of DMA read/writes */
 #define KVM_CAP_MEM_RW 1021
+
+/* This capability allows a clock to be slowed down via a clock scaling factor */
+#define KVM_CAP_CPU_CLOCK_SCALE 1022
 
 /* Indicates presence of in-kvm disk support */
 #define KVM_CAP_DISK_RW 257
@@ -1667,6 +1671,10 @@ struct kvm_dev_snapshot {
     __u8 is_write;
 };
 #define KVM_DEV_SNAPSHOT   _IOWR(KVMIO,  0xf7, struct kvm_dev_snapshot)
+
+/* Available with KVM_CAP_CPU_CLOCK_SCALE */
+#define KVM_SET_CLOCK_SCALE _IOWR(KVMIO, 0xf8, unsigned*)
+
 
 struct kvm_pre_fault_memory {
 	__u64 gpa;

@@ -73,14 +73,27 @@ int64_t cpu_get_ticks(void)
 
 int64_t cpu_get_clock_locked(void)
 {
-    int64_t time;
+    if (!timers_state.cpu_ticks_enabled) {
+        return timers_state.cpu_clock_offset;
+    } else {
+        /* Compute how much real time elapsed since last request */
+        int64_t cur_clock = get_clock() + timers_state.cpu_clock_offset;
+        int64_t increment = cur_clock - timers_state.cpu_clock_prev;
+        assert(increment >= 0);
 
-    time = timers_state.cpu_clock_offset;
-    if (timers_state.cpu_ticks_enabled) {
-        time += get_clock();
+        /* Slow the clock down according to the scale */
+        int64_t result = timers_state.cpu_clock_prev_scaled + increment / timers_state.cpu_clock_scale_factor;
+
+        /* Check that monotonicity is not violated */
+        assert(cur_clock >= 0 && cur_clock >= timers_state.cpu_clock_prev);
+        assert(result >= 0 && result >= timers_state.cpu_clock_prev_scaled);
+
+        /* Save the current time stamp */
+        timers_state.cpu_clock_prev_scaled = result;
+        timers_state.cpu_clock_prev = cur_clock;
+
+        return result;
     }
-
-    return time;
 }
 
 /*
@@ -90,12 +103,14 @@ int64_t cpu_get_clock_locked(void)
 int64_t cpu_get_clock(void)
 {
     int64_t ti;
-    unsigned start;
 
-    do {
-        start = seqlock_read_begin(&timers_state.vm_clock_seqlock);
-        ti = cpu_get_clock_locked();
-    } while (seqlock_read_retry(&timers_state.vm_clock_seqlock, start));
+    seqlock_write_lock(&timers_state.vm_clock_seqlock,
+                       &timers_state.vm_clock_lock);
+
+    ti = cpu_get_clock_locked();
+
+    seqlock_write_unlock(&timers_state.vm_clock_seqlock,
+                       &timers_state.vm_clock_lock);
 
     return ti;
 }
@@ -109,9 +124,15 @@ void cpu_enable_ticks(void)
     seqlock_write_lock(&timers_state.vm_clock_seqlock,
                        &timers_state.vm_clock_lock);
     if (!timers_state.cpu_ticks_enabled) {
+        int64_t cur_clock = get_clock();
+
         timers_state.cpu_ticks_offset -= cpu_get_host_ticks();
-        timers_state.cpu_clock_offset -= get_clock();
+        timers_state.cpu_clock_offset -= cur_clock;
         timers_state.cpu_ticks_enabled = 1;
+
+        /* Fast-forward suspended clocks */
+        timers_state.cpu_clock_prev = cur_clock + timers_state.cpu_clock_offset;
+        timers_state.cpu_clock_prev_scaled = timers_state.cpu_clock_prev;
     }
     seqlock_write_unlock(&timers_state.vm_clock_seqlock,
                        &timers_state.vm_clock_lock);
@@ -217,6 +238,24 @@ static const VMStateDescription icount_vmstate_timers = {
     }
 };
 
+/*
+ * This is a subsection for clock scaling.
+ */
+static const VMStateDescription scale_vmstate_timers = {
+    .name = "timer/scale",
+    .version_id = 1,
+    .minimum_version_id = 1,
+    .fields = (const VMStateField[]) {
+        VMSTATE_INT32(cpu_clock_scale_factor, TimersState),
+        VMSTATE_INT64(cpu_clock_prev, TimersState),
+        VMSTATE_INT64(cpu_clock_prev_scaled, TimersState),
+        VMSTATE_END_OF_LIST()
+    },
+    .subsections = (const VMStateDescription * const []) {
+        NULL
+    }
+};
+
 static const VMStateDescription vmstate_timers = {
     .name = "timer",
     .version_id = 2,
@@ -229,6 +268,7 @@ static const VMStateDescription vmstate_timers = {
     },
     .subsections = (const VMStateDescription * const []) {
         &icount_vmstate_timers,
+        &scale_vmstate_timers,
         NULL
     }
 };
@@ -264,7 +304,14 @@ void qemu_timer_notify_cb(void *opaque, QEMUClockType type)
     }
 }
 
-TimersState timers_state;
+TimersState timers_state = {
+    .cpu_clock_scale_factor = 1,
+};
+
+int32_t *cpu_get_clock_scale_ptr(void)
+{
+    return &timers_state.cpu_clock_scale_factor;
+}
 
 /* initialize timers state and the cpu throttle for convenience */
 void cpu_timers_init(void)
