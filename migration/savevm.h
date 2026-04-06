@@ -31,6 +31,7 @@
 
 #define QEMU_VM_PING_PACKAGED_LOADED 0x42
 
+int qemu_savevm_state(QEMUFile *f, Error **errp);
 bool qemu_savevm_state_blocked(Error **errp);
 void qemu_savevm_non_migratable_list(strList **reasons);
 int qemu_savevm_state_prepare(Error **errp);
