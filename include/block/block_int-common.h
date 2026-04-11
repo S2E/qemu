@@ -490,6 +490,13 @@ struct BlockDriver {
         BlockDriverState *bs, void *host, size_t size);
 
     /*
+     * Re-open block driver file descriptors after a process fork.
+     * Called by bdrv_reopen_fds() on each BlockDriverState.
+     * Returns 0 on success, negative errno on failure.
+     */
+    int (*bdrv_reopen_fd)(BlockDriverState *bs);
+
+    /*
      * This field is modified only under the BQL, and is part of
      * the global state.
      */

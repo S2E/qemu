@@ -194,6 +194,8 @@ void bdrv_activate_all(Error **errp);
 int GRAPH_UNLOCKED bdrv_inactivate_all(void);
 
 int bdrv_flush_all(void);
+int bdrv_reopen_fds(void);
+int bdrv_reopen_fd(BlockDriverState *bs);
 void GRAPH_UNLOCKED bdrv_close_all(void);
 void GRAPH_UNLOCKED bdrv_drain_all_begin(void);
 void bdrv_drain_all_begin_nopoll(void);

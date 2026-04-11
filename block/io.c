@@ -2359,6 +2359,32 @@ int bdrv_flush_all(void)
     return result;
 }
 
+/**
+ * bdrv_reopen_fds: Re-open all block driver file descriptors after fork.
+ *
+ * Iterates over all BlockDriverStates and calls each driver's
+ * bdrv_reopen_fd() callback (if present). Used after forking a new QEMU
+ * child process so it gets independent file descriptors.
+ */
+int bdrv_reopen_fds(void)
+{
+    BdrvNextIterator it;
+    BlockDriverState *bs = NULL;
+    int result = 0;
+
+    GLOBAL_STATE_CODE();
+    GRAPH_RDLOCK_GUARD_MAINLOOP();
+
+    for (bs = bdrv_first(&it); bs; bs = bdrv_next(&it)) {
+        int ret = bdrv_reopen_fd(bs);
+        if (ret < 0 && !result) {
+            result = ret;
+        }
+    }
+
+    return result;
+}
+
 /*
  * Returns the allocation status of the specified sectors.
  * Drivers not implementing the functionality are assumed to not support

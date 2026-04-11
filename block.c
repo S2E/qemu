@@ -8529,3 +8529,11 @@ void bdrv_bsc_fill(BlockDriverState *bs, int64_t offset, int64_t bytes)
         g_free_rcu(old_bsc, rcu);
     }
 }
+
+int bdrv_reopen_fd(BlockDriverState *bs)
+{
+    if (!bs->drv || !bs->drv->bdrv_reopen_fd) {
+        return -1;
+    }
+    return bs->drv->bdrv_reopen_fd(bs);
+}
