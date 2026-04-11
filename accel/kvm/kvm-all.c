@@ -62,6 +62,7 @@
 #include "migration/savevm.h"
 #include "migration/vmstate.h"
 #include "block/block-global-state.h"
+#include "system/system.h"
 
 /* This check must be after config-host.h is included */
 #ifdef CONFIG_EVENTFD
@@ -2702,6 +2703,31 @@ static int kvm_dev_restore_snapshot(void)
 }
 #endif
 
+static void kvm_clone_process(CPUState *cpu)
+{
+    /*
+     * After fork, the child inherits the parent's CPU thread identity.
+     * Update the thread handle and ID for the current (child) thread,
+     * then spawn a new main loop thread to drive the child QEMU instance.
+     */
+    qemu_thread_get_self(cpu->thread);
+    cpu->thread_id = qemu_get_thread_id();
+    qemu_cond_init(cpu->halt_cond);
+
+    g_main_loop_thread_inited = false;
+
+    int ret = respawn_main_thread();
+    if (ret < 0) {
+        fprintf(stderr, "kvm_clone_process: could not create main loop thread\n");
+        abort();
+    }
+
+    /* Wait for the new main loop thread to finish initialization */
+    while (!g_main_loop_thread_inited) {
+        /* spin */
+    }
+}
+
 bool kvm_dirty_ring_enabled(void)
 {
     return kvm_state && kvm_state->kvm_dirty_ring_size;
@@ -3682,6 +3708,12 @@ int kvm_cpu_exec(CPUState *cpu)
         case KVM_EXIT_RESTORE_DEV_STATE:
             bql_lock();
             kvm_dev_restore_snapshot();
+            bql_unlock();
+            ret = 0;
+            break;
+        case KVM_EXIT_CLONE_PROCESS:
+            bql_lock();
+            kvm_clone_process(cpu);
             bql_unlock();
             ret = 0;
             break;

@@ -27,6 +27,9 @@
 #include "qemu/main-loop.h"
 #include "system/replay.h"
 #include "system/system.h"
+#include "system/cpus.h"
+#include "monitor/monitor.h"
+#include "qapi/error.h"
 
 #ifdef CONFIG_SDL
 /*
@@ -101,4 +104,40 @@ int main(int argc, char **argv)
         qemu_default_main(NULL);
         g_assert_not_reached();
     }
+}
+
+static QemuThread s_main_loop_thread;
+volatile bool g_main_loop_thread_inited = false;
+
+int respawn_main_thread(void)
+{
+    Error *err = NULL;
+
+#ifdef CONFIG_POSIX
+    /*
+     * This thread is spawned from the old CPU thread after fork, which has
+     * its signals disabled. Reset the signal mask so QEMU reacts to signals.
+     */
+    sigset_t set;
+    sigemptyset(&set);
+    pthread_sigmask(SIG_SETMASK, &set, NULL);
+#endif
+
+    bdrv_reopen_fds();
+    rcu_reset();
+    monitor_resurrect();
+    qemu_set_io_thread_self();
+
+    if (qemu_init_main_loop_reinit(&err)) {
+        error_report_err(err);
+        abort();
+    }
+
+    os_setup_signal_handling();
+
+    qemu_thread_create(&s_main_loop_thread, "qemu_main",
+                       qemu_default_main, NULL, QEMU_THREAD_DETACHED);
+
+    g_main_loop_thread_inited = true;
+    return 0;
 }

@@ -55,6 +55,15 @@ typedef struct MainLoop MainLoop;
 int qemu_init_main_loop(Error **errp);
 
 /**
+ * qemu_init_main_loop_reinit: Re-initialize the main loop after a process fork.
+ *
+ * Recreates the minimum state needed for the QEMU child to run after the
+ * parent QEMU process forked. Re-creates signal handlers and renews the
+ * AioContext file descriptors so the child is independent from the parent.
+ */
+int qemu_init_main_loop_reinit(Error **errp);
+
+/**
  * main_loop_wait: Run one iteration of the main loop.
  *
  * If @nonblocking is true, poll for events, otherwise suspend until

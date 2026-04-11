@@ -758,6 +758,11 @@ void qemu_set_current_aio_context(AioContext *ctx)
     set_my_aiocontext(ctx);
 }
 
+void qemu_reset_current_aio_context(AioContext *ctx)
+{
+    set_my_aiocontext(ctx);
+}
+
 void aio_context_set_thread_pool_params(AioContext *ctx, int64_t min,
                                         int64_t max, Error **errp)
 {

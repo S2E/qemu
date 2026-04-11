@@ -171,6 +171,7 @@ struct kvm_xen_exit {
 #define KVM_EXIT_FLUSH_DISK       100
 #define KVM_EXIT_SAVE_DEV_STATE   101
 #define KVM_EXIT_RESTORE_DEV_STATE   102
+#define KVM_EXIT_CLONE_PROCESS    103
 #define KVM_EXIT_ARM_NISV         28
 #define KVM_EXIT_X86_RDMSR        29
 #define KVM_EXIT_X86_WRMSR        30

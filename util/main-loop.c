@@ -187,6 +187,26 @@ int qemu_init_main_loop(Error **errp)
     return 0;
 }
 
+int qemu_init_main_loop_reinit(Error **errp)
+{
+    /*
+     * Do NOT call qemu_signal_init() here. Signal masks and the signalfd
+     * handler registered via qemu_set_fd_handler() are inherited from the
+     * parent process and remain valid in the child. Creating a new signalfd
+     * would result in two competing readers on the same signal set, and the
+     * new one could dispatch SIGTERM/SIGALRM as a spurious shutdown request,
+     * causing qemu_main_loop() to exit immediately.
+     */
+
+    if (aio_context_renew(qemu_aio_context) < 0) {
+        error_setg(errp, "qemu_init_main_loop_reinit: aio_context_renew failed");
+        return -1;
+    }
+
+    qemu_reset_current_aio_context(qemu_aio_context);
+    return 0;
+}
+
 static void main_loop_update_params(EventLoopBase *base, Error **errp)
 {
     ERRP_GUARD();

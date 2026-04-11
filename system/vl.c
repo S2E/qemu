@@ -3926,6 +3926,10 @@ void qemu_init(int argc, char **argv)
     if (migrate_mode() != MIG_MODE_CPR_EXEC) {
         os_setup_post();
     }
+
+#ifdef CONFIG_POSIX
+    register_atfork_cb();
+#endif
     resume_mux_open();
 
     qemu_initialize_savevm_timer();

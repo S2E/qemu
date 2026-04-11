@@ -112,6 +112,18 @@ void qemu_init(int argc, char **argv);
 int qemu_main_loop(void);
 void qemu_cleanup(int);
 
+/**
+ * respawn_main_thread: Spawn a new main loop thread in the forked child.
+ *
+ * Called from the CPU thread (via kvm_clone_process) after the parent QEMU
+ * has forked. Creates a detached thread that re-initializes the main loop
+ * and runs it independently from the parent.
+ *
+ * Returns 0 on success, negative on failure.
+ */
+int respawn_main_thread(void);
+extern volatile bool g_main_loop_thread_inited;
+
 extern QemuOptsList qemu_legacy_drive_opts;
 extern QemuOptsList qemu_common_drive_opts;
 extern QemuOptsList qemu_drive_opts;

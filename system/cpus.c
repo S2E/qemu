@@ -424,6 +424,41 @@ static QemuCond qemu_cpu_cond;
 /* system init */
 static QemuCond qemu_pause_cond;
 
+#ifdef CONFIG_POSIX
+static void fork_prepare(void)
+{
+    if (qemu_in_vcpu_thread()) {
+        bql_lock();
+    }
+}
+
+static void fork_done_parent(void)
+{
+    if (qemu_in_vcpu_thread()) {
+        bql_unlock();
+    }
+}
+
+static void fork_done_child(void)
+{
+    if (qemu_in_vcpu_thread()) {
+        /*
+         * fork_prepare() acquired the BQL in the vCPU thread, so the TLS
+         * tracking considers it locked. Reset the tracking first, then
+         * re-initialize the mutex so the child starts with a clean,
+         * unlocked BQL that any thread can acquire normally.
+         */
+        bql_update_status(false);
+        qemu_mutex_init(&bql);
+    }
+}
+
+void register_atfork_cb(void)
+{
+    pthread_atfork(fork_prepare, fork_done_parent, fork_done_child);
+}
+#endif
+
 void qemu_init_cpu_loop(void)
 {
     qemu_init_sigbus();
@@ -431,6 +466,11 @@ void qemu_init_cpu_loop(void)
     qemu_cond_init(&qemu_pause_cond);
     qemu_mutex_init(&bql);
 
+    qemu_thread_get_self(&io_thread);
+}
+
+void qemu_set_io_thread_self(void)
+{
     qemu_thread_get_self(&io_thread);
 }
 

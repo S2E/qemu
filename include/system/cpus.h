@@ -40,4 +40,10 @@ void cpu_synchronize_all_post_reset(void);
 void cpu_synchronize_all_post_init(void);
 void cpu_synchronize_all_pre_loadvm(void);
 
+void qemu_set_io_thread_self(void);
+
+#ifdef CONFIG_POSIX
+void register_atfork_cb(void);
+#endif
+
 #endif

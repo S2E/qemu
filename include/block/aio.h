@@ -799,6 +799,8 @@ AioContext *qemu_get_current_aio_context(void);
 
 void qemu_set_current_aio_context(AioContext *ctx);
 
+void qemu_reset_current_aio_context(AioContext *ctx);
+
 /**
  * aio_context_setup:
  * @ctx: the aio context
