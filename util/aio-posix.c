@@ -762,6 +762,21 @@ bool aio_context_setup(AioContext *ctx, Error **errp)
     return true;
 }
 
+void aio_context_reinit(AioContext *ctx)
+{
+    /*
+     * After a fork, the child inherits all file descriptors from the parent.
+     * Re-create the epoll fd so that it is independent from the parent.
+     * io_uring is not handled here (S2E does not use it).
+     */
+    if (ctx->epollfd != -1) {
+        int old_fd = ctx->epollfd;
+        fdmon_epoll_disable(ctx);
+        fdmon_epoll_setup(ctx);
+        assert(ctx->epollfd == old_fd);
+    }
+}
+
 void aio_context_destroy(AioContext *ctx)
 {
 #ifdef CONFIG_LINUX_IO_URING

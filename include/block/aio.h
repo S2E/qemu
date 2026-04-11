@@ -368,6 +368,18 @@ struct AioContext {
 AioContext *aio_context_new(Error **errp);
 
 /**
+ * aio_context_renew: Re-initialize an AioContext's file descriptors after fork.
+ *
+ * After fork(), the child process inherits all file descriptors from the
+ * parent. This function re-creates the internal fds (event notifier, epoll)
+ * so the child is independent from the parent. The AioContext pointer and
+ * all registered handlers remain valid.
+ *
+ * Returns 0 on success, -1 on failure.
+ */
+int aio_context_renew(AioContext *ctx);
+
+/**
  * aio_context_ref:
  * @ctx: The AioContext to operate on.
  *
@@ -797,6 +809,14 @@ void qemu_set_current_aio_context(AioContext *ctx);
  * Returns: true on success, false otherwise
  */
 bool aio_context_setup(AioContext *ctx, Error **errp);
+
+/**
+ * aio_context_reinit: Re-create the epoll fd after a process fork.
+ *
+ * Closes and re-opens the epoll file descriptor so the child process
+ * gets an independent one. Called internally by aio_context_renew().
+ */
+void aio_context_reinit(AioContext *ctx);
 
 /**
  * aio_context_destroy:
