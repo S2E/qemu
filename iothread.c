@@ -219,6 +219,28 @@ static void iothread_init(EventLoopBase *base, Error **errp)
     }
 }
 
+void iothread_resurrect(IOThread *iothread)
+{
+    g_autofree char *thread_name = g_strdup_printf("IO %s",
+        object_get_canonical_path_component(OBJECT(iothread)));
+
+    iothread->stopping = false;
+    iothread->running = true;
+    iothread->thread_id = -1;
+
+    if (aio_context_renew(iothread->ctx) < 0) {
+        fprintf(stderr, "iothread_resurrect: aio_context_renew failed\n");
+        abort();
+    }
+
+    qemu_thread_create(&iothread->thread, thread_name, iothread_run,
+                       iothread, QEMU_THREAD_JOINABLE);
+
+    while (iothread->thread_id == -1) {
+        qemu_sem_wait(&iothread->init_done_sem);
+    }
+}
+
 typedef struct {
     const char *name;
     ptrdiff_t offset; /* field's byte offset in IOThread struct */

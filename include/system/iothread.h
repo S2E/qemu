@@ -57,6 +57,7 @@ GMainContext *iothread_get_g_main_context(IOThread *iothread);
 IOThread *iothread_create(const char *id, Error **errp);
 void iothread_stop(IOThread *iothread);
 void iothread_destroy(IOThread *iothread);
+void iothread_resurrect(IOThread *iothread);
 
 /*
  * Returns true if executing within IOThread context,

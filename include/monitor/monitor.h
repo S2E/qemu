@@ -24,6 +24,7 @@ void monitor_init_hmp(Chardev *chr, bool use_readline, Error **errp);
 int monitor_init(MonitorOptions *opts, bool allow_hmp, Error **errp);
 int monitor_init_opts(QemuOpts *opts, Error **errp);
 void monitor_cleanup(void);
+void monitor_resurrect(void);
 
 int monitor_suspend(Monitor *mon);
 void monitor_resume(Monitor *mon);

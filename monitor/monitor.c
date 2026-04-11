@@ -621,6 +621,13 @@ static void monitor_iothread_init(void)
     mon_iothread = iothread_create("mon_iothread", &error_abort);
 }
 
+void monitor_resurrect(void)
+{
+    if (mon_iothread) {
+        iothread_resurrect(mon_iothread);
+    }
+}
+
 void monitor_data_init(Monitor *mon, bool is_qmp, bool skip_flush,
                        bool use_io_thread)
 {
