@@ -1009,7 +1009,7 @@ void vmstate_unregister(VMStateIf *obj, const VMStateDescription *vmsd,
     }
 }
 
-static const char *s_blacklist[] = {"cpu", "block", "ram", NULL};
+static const char *s_blacklist[] = {"block", "ram", NULL};
 
 static inline int is_dev_blacklisted(SaveStateEntry *se)
 {
