@@ -2871,6 +2871,47 @@ static int kvm_dev_restore_snapshot(void)
 }
 #endif
 
+/*
+ * A state switch is atomic: the bql is held from the first to the last step,
+ * so that nothing else touches the devices in between. The symbolic execution
+ * engine does its own part of the switch in KVM_SWITCH_STATE_CONTINUE.
+ */
+static int kvm_handle_switch_state(CPUState *cpu, struct kvm_run *run)
+{
+    int ret = 0;
+
+    bql_lock();
+
+    while (run->switch_state.step != KVM_SWITCH_STATE_DONE) {
+        switch (run->switch_state.step) {
+        case KVM_SWITCH_STATE_FLUSH_DISK:
+            bdrv_drain_all_begin();
+            bdrv_flush_all();
+            bdrv_drain_all_end();
+            break;
+        case KVM_SWITCH_STATE_SAVE_DEV_STATE:
+            kvm_dev_save_snapshot();
+            break;
+        case KVM_SWITCH_STATE_RESTORE_DEV_STATE:
+            kvm_dev_restore_snapshot();
+            break;
+        default:
+            fprintf(stderr, "Unknown state switch step %u\n",
+                    run->switch_state.step);
+            abort();
+        }
+
+        ret = kvm_vcpu_ioctl(cpu, KVM_SWITCH_STATE_CONTINUE, 0);
+        if (ret < 0) {
+            break;
+        }
+    }
+
+    bql_unlock();
+
+    return ret;
+}
+
 static void kvm_clone_process(CPUState *cpu)
 {
     /*
@@ -3975,25 +4016,11 @@ int kvm_cpu_exec(CPUState *cpu)
             ret = kvm_convert_memory(run->memory_fault.gpa, run->memory_fault.size,
                                      run->memory_fault.flags & KVM_MEMORY_EXIT_FLAG_PRIVATE);
             break;
-        case KVM_EXIT_FLUSH_DISK:
-            bql_lock();
-            bdrv_drain_all_begin();
-            bdrv_flush_all();
-            bdrv_drain_all_end();
-            bql_unlock();
-            ret = 0;
-            break;
-        case KVM_EXIT_SAVE_DEV_STATE:
-            bql_lock();
-            kvm_dev_save_snapshot();
-            bql_unlock();
-            ret = 0;
-            break;
-        case KVM_EXIT_RESTORE_DEV_STATE:
-            bql_lock();
-            kvm_dev_restore_snapshot();
-            bql_unlock();
-            ret = 0;
+        case KVM_EXIT_SWITCH_STATE:
+            ret = kvm_handle_switch_state(cpu, run);
+            if (ret == -EINTR || ret == -EAGAIN) {
+                ret = EXCP_INTERRUPT;
+            }
             break;
         case KVM_EXIT_CLONE_PROCESS:
             bql_lock();
