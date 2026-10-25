@@ -470,6 +470,9 @@ struct qemu_work_item;
  *    ring is enabled.
  * @kvm_fetch_index: Keeps the index that we last fetched from the per-vCPU
  *    dirty ring structure.
+ * @kvm_switch_state_pending: The symbolic execution engine requested a state
+ *    switch (KVM_EXIT_SWITCH_STATE) while the vCPU had to stop. The vCPU
+ *    performs the switch before it runs the guest again.
  *
  * @neg_align: The CPUState is the common part of a concrete ArchCPU
  * which is allocated when an individual CPU instance is created. As
@@ -552,6 +555,7 @@ struct CPUState {
     uint32_t kvm_fetch_index;
     uint64_t dirty_pages;
     int kvm_vcpu_stats_fd;
+    bool kvm_switch_state_pending;
 
     /* Use by accel-block: CPU is executing an ioctl() */
     QemuLockCnt in_ioctl_lock;

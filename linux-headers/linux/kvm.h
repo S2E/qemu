@@ -175,7 +175,9 @@ struct kvm_xen_exit {
  * For KVM_EXIT_SWITCH_STATE. The client must perform the requested step,
  * call KVM_SWITCH_STATE_CONTINUE, and repeat until the step is
  * KVM_SWITCH_STATE_DONE. The client must not do anything else with the
- * virtual machine until then.
+ * virtual machine until then. As an exception, the client may postpone the
+ * first step while the vcpu is stopped. It must perform the step before it
+ * runs the vcpu again.
  */
 #define KVM_SWITCH_STATE_DONE              0
 #define KVM_SWITCH_STATE_FLUSH_DISK        1

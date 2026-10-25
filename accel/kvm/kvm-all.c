@@ -2875,12 +2875,30 @@ static int kvm_dev_restore_snapshot(void)
  * A state switch is atomic: the bql is held from the first to the last step,
  * so that nothing else touches the devices in between. The symbolic execution
  * engine does its own part of the switch in KVM_SWITCH_STATE_CONTINUE.
+ *
+ * The switch does not start when the vcpu has to stop. The thread that stops
+ * the vcpus releases the bql while it waits for them, and it may already have
+ * torn down state that the steps need. For example, qemu_cleanup() frees the
+ * migration state, which the device state snapshot uses, before vm_shutdown()
+ * stops the vcpus. The vcpu performs the switch when it runs again. If QEMU
+ * exits instead, the engine never gets past the step that it requested.
+ *
+ * Returns 0 when the switch is done, EXCP_INTERRUPT when the vcpu must leave
+ * kvm_cpu_exec(), or a negative error code.
  */
 static int kvm_handle_switch_state(CPUState *cpu, struct kvm_run *run)
 {
     int ret = 0;
 
     bql_lock();
+
+    if (!cpu_can_run(cpu)) {
+        cpu->kvm_switch_state_pending = true;
+        bql_unlock();
+        return EXCP_INTERRUPT;
+    }
+
+    cpu->kvm_switch_state_pending = false;
 
     while (run->switch_state.step != KVM_SWITCH_STATE_DONE) {
         switch (run->switch_state.step) {
@@ -2908,6 +2926,10 @@ static int kvm_handle_switch_state(CPUState *cpu, struct kvm_run *run)
     }
 
     bql_unlock();
+
+    if (ret == -EINTR || ret == -EAGAIN) {
+        ret = EXCP_INTERRUPT;
+    }
 
     return ret;
 }
@@ -3858,6 +3880,16 @@ int kvm_cpu_exec(CPUState *cpu)
     do {
         MemTxAttrs attrs;
 
+        /*
+         * The engine waits for the client in the middle of a postponed state
+         * switch. Finish it before the registers are written back and interrupts
+         * are injected, in the same order as for a switch that was not postponed.
+         */
+        if (cpu->kvm_switch_state_pending) {
+            ret = kvm_handle_switch_state(cpu, run);
+            continue;
+        }
+
         if (cpu->vcpu_dirty) {
             if (!kvm_cpu_synchronize_put(cpu, KVM_PUT_RUNTIME_STATE,
                                          "at runtime")) {
@@ -4018,9 +4050,6 @@ int kvm_cpu_exec(CPUState *cpu)
             break;
         case KVM_EXIT_SWITCH_STATE:
             ret = kvm_handle_switch_state(cpu, run);
-            if (ret == -EINTR || ret == -EAGAIN) {
-                ret = EXCP_INTERRUPT;
-            }
             break;
         case KVM_EXIT_CLONE_PROCESS:
             bql_lock();
